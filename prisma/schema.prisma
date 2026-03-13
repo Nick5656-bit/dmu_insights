@@ -1,0 +1,313 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  DMU_ADMIN
+  CLUB_ADMIN
+}
+
+enum AgeGroup {
+  UNDER_18
+  AGE_18_30
+  AGE_31_50
+  AGE_51_PLUS
+}
+
+enum RaceClass {
+  MOTOCROSS
+  ENDURO
+  SPEEDWAY
+  TRIAL
+}
+
+enum MemberRole {
+  RIDER
+  VOLUNTEER
+}
+
+enum QuestionType {
+  SCALE_1_5
+  SINGLE_CHOICE
+  TEXT
+}
+
+enum QuestionScope {
+  DMU_STANDARD
+  CLUB_CUSTOM
+}
+
+enum SurveyType {
+  ANNUAL
+  EVENT
+}
+
+enum SurveyStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  CLOSED
+}
+
+enum SurveyInstanceQuestionSource {
+  CORE
+  CLUB_ADDED
+}
+
+enum ScheduledSendStatus {
+  PENDING
+  PROCESSED
+}
+
+enum ScheduledSendTriggerType {
+  MANUAL
+  EVENT_PLUS_1_DAY
+}
+
+enum InvitationStatus {
+  CREATED
+  SENT
+  OPENED
+  ANSWERED
+}
+
+enum MailStatus {
+  SENT
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole
+  clubId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  club                  Club?            @relation(fields: [clubId], references: [id])
+  createdSurveyInstance SurveyInstance[] @relation("SurveyInstanceCreatedBy")
+  createdEvents         Event[]
+}
+
+model Club {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  city      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  members         Member[]
+  createdQuestions Question[]       @relation("QuestionCreatedByClub")
+  surveyInstances SurveyInstance[]
+  events          Event[]
+  surveyResponses SurveyResponse[]
+}
+
+model Member {
+  id         String     @id @default(cuid())
+  clubId     String
+  name       String
+  email      String     @unique
+  ageGroup   AgeGroup
+  raceClass  RaceClass
+  memberRole MemberRole
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  club              Club               @relation(fields: [clubId], references: [id])
+  surveyInvitations SurveyInvitation[]
+}
+
+model Question {
+  id              String        @id @default(cuid())
+  title           String
+  description     String?
+  questionType    QuestionType
+  scope           QuestionScope
+  benchmarkKey    String?
+  createdByClubId String?
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  createdByClub      Club?                    @relation("QuestionCreatedByClub", fields: [createdByClubId], references: [id])
+  options            QuestionOption[]
+  templateQuestions  SurveyTemplateQuestion[]
+  instanceQuestions  SurveyInstanceQuestion[]
+  answers            SurveyAnswer[]
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  label      String
+  value      String
+  sortOrder  Int
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, value])
+}
+
+model SurveyTemplate {
+  id          String     @id @default(cuid())
+  name        String
+  surveyType  SurveyType
+  description String
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  templateQuestions SurveyTemplateQuestion[]
+  surveyInstances   SurveyInstance[]
+}
+
+model SurveyTemplateQuestion {
+  id                      String  @id @default(cuid())
+  surveyTemplateId        String
+  questionId              String
+  sortOrder               Int
+  required                Boolean @default(true)
+  isCoreBenchmarkQuestion Boolean @default(false)
+
+  surveyTemplate SurveyTemplate @relation(fields: [surveyTemplateId], references: [id], onDelete: Cascade)
+  question       Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyTemplateId, questionId])
+}
+
+model SurveyInstance {
+  id              String       @id @default(cuid())
+  surveyTemplateId String
+  clubId          String
+  name            String
+  surveyType      SurveyType
+  status          SurveyStatus @default(DRAFT)
+  eventId         String?
+  createdByUserId String
+  sentAt          DateTime?
+  closesAt        DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  surveyTemplate        SurveyTemplate          @relation(fields: [surveyTemplateId], references: [id])
+  club                  Club                    @relation(fields: [clubId], references: [id])
+  event                 Event?                  @relation(fields: [eventId], references: [id])
+  createdByUser         User                    @relation("SurveyInstanceCreatedBy", fields: [createdByUserId], references: [id])
+  surveyInstanceQuestions SurveyInstanceQuestion[]
+  scheduledSends        ScheduledSend[]
+  invitations           SurveyInvitation[]
+  responses             SurveyResponse[]
+}
+
+model SurveyInstanceQuestion {
+  id               String                      @id @default(cuid())
+  surveyInstanceId String
+  questionId       String
+  sortOrder        Int
+  required         Boolean                     @default(true)
+  sourceType       SurveyInstanceQuestionSource
+
+  surveyInstance SurveyInstance @relation(fields: [surveyInstanceId], references: [id], onDelete: Cascade)
+  question       Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyInstanceId, questionId])
+}
+
+model Event {
+  id              String   @id @default(cuid())
+  clubId          String
+  title           String
+  eventDate       DateTime
+  location        String
+  eventType       String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  club            Club             @relation(fields: [clubId], references: [id])
+  createdByUser   User             @relation(fields: [createdByUserId], references: [id])
+  surveyInstances SurveyInstance[]
+}
+
+model ScheduledSend {
+  id               String                   @id @default(cuid())
+  surveyInstanceId String
+  sendAt           DateTime
+  status           ScheduledSendStatus      @default(PENDING)
+  triggerType      ScheduledSendTriggerType
+  processedAt      DateTime?
+
+  surveyInstance SurveyInstance @relation(fields: [surveyInstanceId], references: [id], onDelete: Cascade)
+}
+
+model SurveyInvitation {
+  id               String           @id @default(cuid())
+  surveyInstanceId String
+  memberId         String
+  emailSnapshot    String
+  token            String           @unique
+  status           InvitationStatus @default(CREATED)
+  sentAt           DateTime?
+  openedAt         DateTime?
+  answeredAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  surveyInstance SurveyInstance @relation(fields: [surveyInstanceId], references: [id], onDelete: Cascade)
+  member         Member         @relation(fields: [memberId], references: [id])
+  mailLogs       MailLog[]
+}
+
+model SurveyResponse {
+  id               String     @id @default(cuid())
+  surveyInstanceId String
+  clubId           String
+  submittedAt      DateTime   @default(now())
+  ageGroup         AgeGroup
+  raceClass        RaceClass
+  memberRole       MemberRole
+
+  surveyInstance SurveyInstance @relation(fields: [surveyInstanceId], references: [id], onDelete: Cascade)
+  club           Club           @relation(fields: [clubId], references: [id])
+  answers        SurveyAnswer[]
+}
+
+model SurveyAnswer {
+  id               String  @id @default(cuid())
+  surveyResponseId String
+  questionId       String
+  numericValue     Int?
+  optionValue      String?
+  textValue        String?
+
+  surveyResponse SurveyResponse @relation(fields: [surveyResponseId], references: [id], onDelete: Cascade)
+  question       Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model MailLog {
+  id                 String     @id @default(cuid())
+  surveyInvitationId String
+  toEmail            String
+  subject            String
+  bodyPreview        String
+  sentAt             DateTime
+  status             MailStatus
+
+  surveyInvitation SurveyInvitation @relation(fields: [surveyInvitationId], references: [id], onDelete: Cascade)
+}
