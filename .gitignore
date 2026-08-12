@@ -30,6 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# dev server logs
+*.log
+.codex-dev*.log
+.next-dev*.log
+
 # env files (.env.example er tilladt – den indeholder ingen hemmeligheder)
 .env
 .env.local
