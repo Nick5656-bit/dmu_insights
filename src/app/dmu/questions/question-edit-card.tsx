@@ -25,6 +25,7 @@ interface Question {
 
 interface QuestionEditCardProps {
   question: Question;
+  benchmarkCategoryOptions: string[];
   onEdit: (formData: FormData) => Promise<void>;
   onDelete: (questionId: string) => Promise<void>;
   onToggleActive: (formData: FormData) => Promise<void>;
@@ -32,6 +33,7 @@ interface QuestionEditCardProps {
 
 export function QuestionEditCard({
   question,
+  benchmarkCategoryOptions,
   onEdit,
   onDelete,
   onToggleActive,
@@ -58,6 +60,11 @@ export function QuestionEditCard({
     await onEdit(formData);
     setIsEditing(false);
   };
+
+  const currentBenchmarkCategory = question.benchmarkKey ? (question.benchmarkKey.split("_")[0] ?? "") : "";
+  const currentBenchmarkCode = question.benchmarkKey
+    ? question.benchmarkKey.split("_").slice(1).join("_")
+    : "";
 
   if (isEditing) {
     return (
@@ -107,15 +114,40 @@ export function QuestionEditCard({
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor={`benchmarkKey-${question.id}`}>
-              Sammenligningsnøgle (valgfri)
+            <label className="text-sm font-medium" htmlFor={`benchmarkCategory-${question.id}`}>
+              Benchmark-kategori (valgfri)
+            </label>
+            <select
+              id={`benchmarkCategory-${question.id}`}
+              name="benchmarkCategory"
+              defaultValue={currentBenchmarkCategory}
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            >
+              <option value="">Ingen benchmark</option>
+              {benchmarkCategoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+            <input
+              name="benchmarkCategoryCustom"
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              placeholder="Ny kategori (valgfri)"
+            />
+            <p className="text-xs text-muted-foreground">Overskriver valgt kategori.</p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-medium" htmlFor={`benchmarkCode-${question.id}`}>
+              Benchmark-kode (valgfri)
             </label>
             <input
-              id={`benchmarkKey-${question.id}`}
-              name="benchmarkKey"
-              defaultValue={question.benchmarkKey ?? ""}
+              id={`benchmarkCode-${question.id}`}
+              name="benchmarkCode"
+              defaultValue={currentBenchmarkCode}
               className="w-full rounded-md border px-3 py-2 text-sm"
-              placeholder="fx SATISFACTION_OVERALL"
+              placeholder="fx OVERALL eller ACTIVITY_VALUE"
             />
           </div>
 
@@ -156,20 +188,20 @@ export function QuestionEditCard({
 
   return (
     <article className="rounded-lg border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-medium">{question.title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Type: {questionTypeLabels[question.questionType]} · Sammenligningsnøgle: {question.benchmarkKey ?? "Ingen"}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-medium break-words">{question.title}</p>
+          <p className="mt-1 break-words text-xs text-muted-foreground">
+            {questionTypeLabels[question.questionType]} · {question.benchmarkKey ?? "Ingen benchmark"}
           </p>
           {question.options.length > 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Svarmuligheder: {question.options.map((option) => option.label).join(", ")}
+            <p className="mt-1 break-words text-xs text-muted-foreground">
+              {question.options.map((option) => option.label).join(", ")}
             </p>
           ) : null}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <button
             type="button"
             onClick={() => setIsEditing(true)}
@@ -183,11 +215,25 @@ export function QuestionEditCard({
             <input type="hidden" name="nextActive" value={question.active ? "false" : "true"} />
             <button
               type="submit"
-              className={`rounded-md px-3 py-2 text-xs font-medium ${
-                question.active ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                question.active
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  : "border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100"
               }`}
+              aria-label={question.active ? "Sæt som deaktiveret" : "Sæt som aktiv"}
             >
-              {question.active ? "Deaktiver" : "Aktiver"}
+              <span
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  question.active ? "bg-emerald-500" : "bg-gray-400"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    question.active ? "translate-x-4" : "translate-x-0.5"
+                  }`}
+                />
+              </span>
+              <span>{question.active ? "Aktiveret" : "Deaktiveret"}</span>
             </button>
           </form>
 

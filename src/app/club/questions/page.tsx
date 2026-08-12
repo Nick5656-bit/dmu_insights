@@ -3,7 +3,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ClubQuestionCreateForm } from "./club-question-create-form";
 import { ClubQuestionEditCard } from "./club-question-edit-card";
+
+const questionTypeLabels: Record<QuestionType, string> = {
+  SCALE_1_5: "Skala 1-5",
+  SINGLE_CHOICE: "Valgmuligheder",
+  TEXT: "Tekst",
+};
 
 const createQuestionSchema = z.object({
   title: z.string().trim().min(3),
@@ -24,8 +31,8 @@ export default async function ClubQuestionsPage() {
   const session = await requireRole("CLUB_ADMIN");
   if (!session.clubId) {
     return (
-      <section className="rounded-xl border bg-background p-6">
-        <h2 className="text-xl font-semibold">Klubbens spørgsmål</h2>
+      <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75">
+        <h2 className="text-3xl font-semibold tracking-tight text-white">Klubbens spørgsmål</h2>
         <p className="mt-2 text-sm text-muted-foreground">Brugeren mangler klubtilknytning.</p>
       </section>
     );
@@ -48,12 +55,44 @@ export default async function ClubQuestionsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  // Get all DMU standard questions for reference
-  const dmuQuestions = await prisma.question.findMany({
-    where: { scope: "DMU_STANDARD", active: true },
-    include: { options: { orderBy: { sortOrder: "asc" } } },
-    orderBy: { title: "asc" },
+  // Get active DMU templates with their active standard questions
+  const dmuTemplates = await prisma.surveyTemplate.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      surveyType: true,
+      templateQuestions: {
+        where: {
+          question: {
+            scope: "DMU_STANDARD",
+            active: true,
+          },
+        },
+        orderBy: { sortOrder: "asc" },
+        select: {
+          required: true,
+          question: {
+            select: {
+              id: true,
+              title: true,
+              questionType: true,
+              options: {
+                orderBy: { sortOrder: "asc" },
+                select: { label: true },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
   });
+
+  const surveyTypeLabels = {
+    ANNUAL: "Årlig",
+    EVENT: "Arrangement",
+  } as const;
 
   // Get survey instances that have used any custom questions from this club
   const surveysWithCustomQuestions = await prisma.surveyInstance.findMany({
@@ -253,8 +292,8 @@ export default async function ClubQuestionsPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border bg-background p-6">
-        <h2 className="text-xl font-semibold">Klubbens spørgsmål</h2>
+      <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75">
+        <h2 className="text-3xl font-semibold tracking-tight text-white">Klubbens spørgsmål</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Opret dine egne spørgsmål, som kan tilføjes til spørgeskemaer. Du kan ikke redigere eller slette spørgsmål, der er sendt ud.
         </p>
@@ -262,45 +301,7 @@ export default async function ClubQuestionsPage() {
 
       <section className="rounded-xl border bg-background p-6">
         <h3 className="text-lg font-semibold">Opret nyt eget spørgsmål</h3>
-        <form action={createQuestionAction} className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium" htmlFor="title">
-              Spørgsmålstekst
-            </label>
-            <input id="title" name="title" required className="w-full rounded-md border px-3 py-2 text-sm" />
-          </div>
-
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium" htmlFor="description">
-              Beskrivelse (valgfri)
-            </label>
-            <input id="description" name="description" className="w-full rounded-md border px-3 py-2 text-sm" />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor="questionType">
-              Type
-            </label>
-            <select id="questionType" name="questionType" defaultValue="SCALE_1_5" className="w-full rounded-md border px-3 py-2 text-sm">
-              <option value="SCALE_1_5">Skala 1-5</option>
-              <option value="SINGLE_CHOICE">Valgmuligheder</option>
-              <option value="TEXT">Tekst</option>
-            </select>
-          </div>
-
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium" htmlFor="optionsRaw">
-              Svarmuligheder (kommasepareret, kun for valgmuligheder)
-            </label>
-            <input id="optionsRaw" name="optionsRaw" className="w-full rounded-md border px-3 py-2 text-sm" placeholder="Meget positivt, Positivt, Neutralt" />
-          </div>
-
-          <div className="md:col-span-2">
-            <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-              Opret spørgsmål
-            </button>
-          </div>
-        </form>
+        <ClubQuestionCreateForm action={createQuestionAction} />
       </section>
 
       {customQuestions.length > 0 && (
@@ -320,22 +321,45 @@ export default async function ClubQuestionsPage() {
         </section>
       )}
 
-      {dmuQuestions.length > 0 && (
+      {dmuTemplates.length > 0 && (
         <section className="rounded-xl border bg-background p-6">
           <h3 className="text-lg font-semibold">DMU standardspørgsmål (til brug i spørgeskemaer)</h3>
           <p className="mt-2 text-xs text-muted-foreground">
-            Disse spørgsmål kan tilføjes når du laver et nyt spørgeskema.
+            Udvid en skabelon for at se de tilhørende spørgsmål.
           </p>
           <div className="mt-4 space-y-2">
-            {dmuQuestions.map((question) => (
-              <div key={question.id} className="rounded-lg border p-3">
-                <p className="font-medium text-sm">{question.title}</p>
-                {question.options.length > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Svarmuligheder: {question.options.map((opt) => opt.label).join(", ")}
-                  </p>
-                )}
-              </div>
+            {dmuTemplates.map((template) => (
+              <details key={template.id} className="rounded-lg border" open={dmuTemplates.length === 1}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{template.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {surveyTypeLabels[template.surveyType]} · {template.templateQuestions.length} spørgsmål
+                    </p>
+                  </div>
+                  <span className="rounded-md border px-2 py-1 text-[11px] font-medium">Vis spørgsmål</span>
+                </summary>
+
+                <div className="space-y-2 border-t p-3">
+                  {template.templateQuestions.map((templateQuestion) => (
+                    <div key={`${template.id}-${templateQuestion.question.id}`} className="rounded-md border p-3">
+                      <p className="text-sm font-medium">{templateQuestion.question.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Type: {questionTypeLabels[templateQuestion.question.questionType]}
+                        {templateQuestion.required ? " · Påkrævet" : " · Valgfri"}
+                      </p>
+                      {templateQuestion.question.options.length > 0 && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Svarmuligheder: {templateQuestion.question.options.map((option) => option.label).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  {template.templateQuestions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Ingen aktive standardspørgsmål i denne skabelon.</p>
+                  ) : null}
+                </div>
+              </details>
             ))}
           </div>
         </section>

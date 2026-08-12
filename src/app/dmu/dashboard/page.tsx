@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { AgeGroup, MemberRole, RaceClass } from "@prisma/client";
 import { ClubComparisonChart } from "@/components/charts/benchmark-bar-chart";
-import { GettingStartedWizard } from "@/components/getting-started-wizard";
-import { NextActionPanel } from "@/components/next-action-panel";
-import { QuestionDistributionTile } from "@/components/charts/question-distribution-tile";
+import { QuestionDistributionBoard } from "@/components/charts/question-distribution-board";
+import { ClubMultiSelectFilter } from "@/components/club-multi-select-filter";
 import { TextResponsesModal } from "@/components/text-responses-modal";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -29,18 +28,45 @@ const memberRoleOptions: { value: MemberRole; label: string }[] = [
   { value: "VOLUNTEER", label: "Frivillig" },
 ];
 
+const surveyActionLinks = [
+  { href: "/dmu/overview", label: "Overblik" },
+  { href: "/dmu/surveys", label: "Spørgeskemaer" },
+];
+
 type DmuDashboardProps = {
-  searchParams: Promise<{ ageGroup?: string; raceClass?: string; memberRole?: string; surveyTemplateId?: string }>;
+  searchParams: Promise<{
+    ageGroup?: string;
+    raceClass?: string;
+    memberRole?: string;
+    surveyTemplateId?: string;
+    clubIds?: string | string[];
+  }>;
 };
+
+function parseClubIds(rawValue: string | string[] | undefined): string[] {
+  if (!rawValue) {
+    return [];
+  }
+
+  const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+  return [...new Set(values.flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean))];
+}
 
 export default async function DmuDashboardPage({ searchParams }: DmuDashboardProps) {
   await requireRole("DMU_ADMIN");
   const params = await searchParams;
 
+  const clubs = await prisma.club.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+
+  const selectedClubIds = parseClubIds(params.clubIds);
+  const selectedClubs = clubs.filter((club) => selectedClubIds.includes(club.id));
+
   const availableTemplates = await prisma.surveyTemplate.findMany({
     where: {
       surveyInstances: {
-        some: {},
+        some: {
+          ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
+        },
       },
     },
     select: {
@@ -60,7 +86,10 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
   const selectedTemplateInstanceIds = selectedTemplate
     ? (
         await prisma.surveyInstance.findMany({
-          where: { surveyTemplateId: selectedTemplate.id },
+          where: {
+            surveyTemplateId: selectedTemplate.id,
+            ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
+          },
           select: { id: true },
         })
       ).map((instance) => instance.id)
@@ -70,23 +99,30 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
   const raceClassFilter = raceClassOptions.some((option) => option.value === params.raceClass) ? (params.raceClass as RaceClass) : undefined;
   const memberRoleFilter = memberRoleOptions.some((option) => option.value === params.memberRole) ? (params.memberRole as MemberRole) : undefined;
 
+  const activeFilters = [
+    ...(selectedTemplate ? [`Skabelon: ${selectedTemplate.name}`] : []),
+    ...(selectedClubs.length > 0 ? [`Klubber: ${selectedClubs.length}`] : []),
+    ...(ageGroupFilter
+      ? [`Alder: ${ageGroupOptions.find((option) => option.value === ageGroupFilter)?.label ?? ageGroupFilter}`]
+      : []),
+    ...(raceClassFilter
+      ? [`Køreklasse: ${raceClassOptions.find((option) => option.value === raceClassFilter)?.label ?? raceClassFilter}`]
+      : []),
+    ...(memberRoleFilter
+      ? [`Rolle: ${memberRoleOptions.find((option) => option.value === memberRoleFilter)?.label ?? memberRoleFilter}`]
+      : []),
+  ];
+
   const responseWhere = {
     ...(selectedTemplate ? { surveyInstanceId: { in: selectedTemplateInstanceIds } } : {}),
+    ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
     ...(ageGroupFilter ? { ageGroup: ageGroupFilter } : {}),
     ...(raceClassFilter ? { raceClass: raceClassFilter } : {}),
     ...(memberRoleFilter ? { memberRole: memberRoleFilter } : {}),
   };
 
-  const [clubCount, memberCount, surveyCount, eventCount, totalResponses, standardQuestionCount, templateCount, pendingSendCount, clubs, benchmarkQuestions] = await Promise.all([
-    prisma.club.count({ where: { active: true } }),
-    prisma.member.count({ where: { active: true } }),
-    prisma.surveyInstance.count(),
-    prisma.event.count(),
+  const [totalResponses, benchmarkQuestions] = await Promise.all([
     prisma.surveyResponse.count({ where: responseWhere }),
-    prisma.question.count({ where: { scope: "DMU_STANDARD", active: true } }),
-    prisma.surveyTemplate.count({ where: { isActive: true } }),
-    prisma.scheduledSend.count({ where: { status: "PENDING" } }),
-    prisma.club.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     prisma.question.findMany({
       where: {
         scope: "DMU_STANDARD",
@@ -154,50 +190,10 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     });
   }
 
-  const nextAction =
-    standardQuestionCount === 0
-      ? {
-          eyebrow: "Næste handling",
-          title: "Start med at oprette standardspørgsmål",
-          description: "Klubberne kan først bruge systemet, når DMU har oprettet de centrale spørgsmål, som skabelonerne skal bygges af.",
-          primaryLabel: "Opret standardspørgsmål",
-          primaryHref: "/dmu/questions",
-          secondaryLabel: "Se guiden",
-          secondaryHref: "/dmu/dashboard",
-        }
-      : templateCount === 0
-        ? {
-            eyebrow: "Næste handling",
-            title: "Byg den første skabelon",
-            description: "Når spørgsmålene er på plads, er næste skridt at samle dem i en skabelon, som klubberne kan genbruge.",
-            primaryLabel: "Opret skabelon",
-            primaryHref: "/dmu/templates",
-            secondaryLabel: "Se standardspørgsmål",
-            secondaryHref: "/dmu/questions",
-          }
-        : pendingSendCount > 0
-          ? {
-              eyebrow: "Næste handling",
-              title: "Der er planlagte udsendelser, som venter",
-              description: "Mindst én udsendelse er klar eller planlagt. Gå til udsendelser og behandl dem, så klubber og medlemmer modtager spørgeskemaerne.",
-              primaryLabel: "Gå til udsendelser",
-              primaryHref: "/dmu/outbox",
-              secondaryLabel: "Se arrangementer",
-              secondaryHref: "/dmu/events",
-            }
-          : {
-              eyebrow: "Næste handling",
-              title: "Følg op på brugen i klubberne",
-              description: "Opsætningen er på plads. Brug nu overblikket til at følge aktivitet, udsendelser og svar på tværs af klubber.",
-              primaryLabel: "Åbn spørgeskemaoverblik",
-              primaryHref: "/dmu/surveys",
-              secondaryLabel: "Se klubindsigter",
-              secondaryHref: "/dmu/dashboard",
-            };
-
   const keyQuestion = benchmarkQuestions[0];
   const clubComparisonRows: { label: string; own: number; benchmark: number }[] = [];
   const clubTableRows: { clubId: string; clubName: string; count: number; avg: number | null; suppressed: boolean }[] = [];
+  const clubsToCompare = selectedClubs.length > 0 ? selectedClubs : clubs;
 
   let nationalKeyAverage = 0;
   if (keyQuestion) {
@@ -221,7 +217,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
       nationalKeyAverage = Number((nationalAgg._avg.numericValue ?? 0).toFixed(2));
     }
 
-    for (const club of clubs) {
+    for (const club of clubsToCompare) {
       const clubCountForKeyQuestion = await prisma.surveyAnswer.count({
         where: {
           questionId: keyQuestion.id,
@@ -259,21 +255,24 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         suppressed: false,
       });
       clubComparisonRows.push({
-        label: club.name.length > 20 ? `${club.name.slice(0, 20)}…` : club.name,
+        label: club.name.length > 20 ? `${club.name.slice(0, 20)}...` : club.name,
         own: clubAvg,
         benchmark: nationalKeyAverage,
       });
     }
   }
 
-  // Fetch DMU improvement text responses across all clubs
   const dmuImprovementQuestion = await prisma.question.findFirst({
     where: { benchmarkKey: "DMU_CENTRAL_IMPROVEMENT", scope: "DMU_STANDARD" },
   });
 
   const dmuImprovementAnswers = dmuImprovementQuestion
     ? await prisma.surveyAnswer.findMany({
-        where: { questionId: dmuImprovementQuestion.id, textValue: { not: null } },
+        where: {
+          questionId: dmuImprovementQuestion.id,
+          textValue: { not: null },
+          surveyResponse: responseWhere,
+        },
         include: {
           surveyResponse: {
             select: { submittedAt: true, clubId: true },
@@ -283,22 +282,63 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
       })
     : [];
 
-  // Attach club name to each answer
-  const improvementResponses = dmuImprovementAnswers.map((a) => ({
-    text: a.textValue!,
-    clubName: clubs.find((c) => c.id === a.surveyResponse.clubId)?.name ?? "Ukendt klub",
-    submittedAt: a.surveyResponse.submittedAt.toISOString(),
+  const improvementResponses = dmuImprovementAnswers.map((answer) => ({
+    text: answer.textValue!,
+    clubName: clubs.find((club) => club.id === answer.surveyResponse.clubId)?.name ?? "Ukendt klub",
+    submittedAt: answer.surveyResponse.submittedAt.toISOString(),
   }));
+
+  const summaryCards = [
+    { label: "Besvarelser", value: totalResponses, hint: "I valgt udsnit" },
+    { label: "Klubber", value: clubsToCompare.length, hint: selectedClubs.length > 0 ? "Udvalgte klubber" : "Aktive klubber" },
+    { label: "Benchmarks", value: benchmarkQuestions.length, hint: "Skala 1-5" },
+    { label: "Filtre", value: activeFilters.length, hint: activeFilters.length > 0 ? "Aktive" : "Ingen valgt" },
+  ];
+
+  const scopePills = activeFilters.length > 0 ? activeFilters : ["Hele DMU"];
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border bg-background p-6">
-        <h2 className="text-xl font-semibold">DMU-overblik</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Tværgående sammenligning og konkrete klubindsigter.</p>
+      <section className="overflow-visible rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-3xl space-y-4">
+            <span className="inline-flex w-fit items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white/90">
+              Analyse
+            </span>
+            <div className="space-y-2 text-white/75 [&_p]:text-white/75">
+              <h1 className="font-heading text-3xl font-semibold tracking-tight text-white md:text-4xl">National analyse</h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">Benchmark, klubsammenligning og åbne svar samlet i ét arbejdsrum.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {scopePills.map((pill) => (
+                <span
+                  key={pill}
+                  className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85"
+                >
+                  {pill}
+                </span>
+              ))}
+            </div>
+          </div>
 
-        <form className="mt-4 grid gap-3 md:grid-cols-5" method="get">
-          <select name="surveyTemplateId" defaultValue={selectedTemplate?.id ?? ""} className="rounded-md border px-3 py-2 text-sm">
-            <option value="">Alle spørgeskema-skabeloner</option>
+          <div className="grid gap-2 sm:grid-cols-2 xl:w-[320px]">
+            {surveyActionLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/16"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <form className="mt-6 grid gap-3 rounded-[24px] border border-white/12 bg-white/8 p-4 backdrop-blur-sm md:grid-cols-7" method="get">
+          <ClubMultiSelectFilter clubs={clubs} initialSelectedIds={selectedClubIds} />
+
+          <select name="surveyTemplateId" defaultValue={selectedTemplate?.id ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground md:col-span-1">
+            <option value="">Alle skabeloner</option>
             {availableTemplates.map((template) => (
               <option key={template.id} value={template.id}>
                 {template.name} ({template.surveyType.toLowerCase()} · {template._count.surveyInstances} udsendelser)
@@ -306,8 +346,8 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             ))}
           </select>
 
-          <select name="ageGroup" defaultValue={ageGroupFilter ?? ""} className="rounded-md border px-3 py-2 text-sm">
-            <option value="">Alle aldersgrupper</option>
+          <select name="ageGroup" defaultValue={ageGroupFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground md:col-span-1">
+            <option value="">Alle aldre</option>
             {ageGroupOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -315,8 +355,8 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             ))}
           </select>
 
-          <select name="raceClass" defaultValue={raceClassFilter ?? ""} className="rounded-md border px-3 py-2 text-sm">
-            <option value="">Alle køreklasser</option>
+          <select name="raceClass" defaultValue={raceClassFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground md:col-span-1">
+            <option value="">Alle klasser</option>
             {raceClassOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -324,7 +364,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             ))}
           </select>
 
-          <select name="memberRole" defaultValue={memberRoleFilter ?? ""} className="rounded-md border px-3 py-2 text-sm">
+          <select name="memberRole" defaultValue={memberRoleFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground md:col-span-1">
             <option value="">Alle roller</option>
             {memberRoleOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -333,163 +373,159 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             ))}
           </select>
 
-          <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-            Anvend filtre
+          <button
+            type="submit"
+            className="h-11 rounded-2xl bg-white px-4 text-sm font-semibold text-primary shadow-sm transition hover:-translate-y-0.5 hover:bg-white/92 md:col-span-1"
+          >
+            Opdater
           </button>
+
+          <Link
+            href="/dmu/dashboard"
+            className="flex h-11 items-center justify-center rounded-2xl border border-white/15 px-4 text-sm font-medium text-white/85 transition hover:bg-white/10 md:col-span-1"
+          >
+            Nulstil
+          </Link>
         </form>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Aktive klubber</p>
-          <p className="mt-1 text-2xl font-semibold">{clubCount}</p>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => (
+          <article key={card.label} className="rounded-[24px] border border-border/70 bg-card p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">{card.label}</p>
+            <p className="mt-3 font-heading text-3xl font-semibold tracking-tight text-foreground">{card.value}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{card.hint}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
+        <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Klubsammenligning</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Score mod nationalt niveau på det første benchmarkspørgsmål.</p>
+            </div>
+            <span className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">Skala 1-5</span>
+          </div>
+
+          <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
+            {clubComparisonRows.length > 0 ? (
+              <ClubComparisonChart data={clubComparisonRows} />
+            ) : (
+              <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                For få svar til sammenligning i det valgte udsnit.
+              </div>
+            )}
+          </div>
         </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Aktive medlemmer</p>
-          <p className="mt-1 text-2xl font-semibold">{memberCount}</p>
-        </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Spørgeskemaer</p>
-          <p className="mt-1 text-2xl font-semibold">{surveyCount}</p>
-        </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Arrangementer</p>
-          <p className="mt-1 text-2xl font-semibold">{eventCount}</p>
-        </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Filtrerede svar</p>
-          <p className="mt-1 text-2xl font-semibold">{totalResponses}</p>
+
+        <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+          <div className="space-y-3">
+            <div className="rounded-[22px] border border-primary/15 bg-primary/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/80">Adgang</p>
+              <p className="mt-2 text-sm text-foreground">Kun DMU ser klubniveau og direkte links til klubberne.</p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">National score</p>
+                <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
+                  {nationalKeyAverage > 0 ? nationalKeyAverage.toFixed(2) : "-"}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Åbne svar</p>
+                <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">{improvementResponses.length}</p>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background/85">
+              <table className="w-full min-w-[520px] text-sm">
+                <thead>
+                  <tr className="border-b border-border/70 bg-muted/20 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    <th className="py-3 pl-4 pr-2">Klub</th>
+                    <th className="px-2 py-3">Svar</th>
+                    <th className="px-2 py-3">Score</th>
+                    <th className="px-4 py-3 text-right">Detalje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clubTableRows.map((row) => (
+                    <tr key={row.clubId} className="border-b border-border/60 last:border-b-0">
+                      <td className="py-3 pl-4 pr-2 font-medium text-foreground">{row.clubName}</td>
+                      <td className="px-2 py-3 text-muted-foreground">{row.count}</td>
+                      <td className="px-2 py-3">
+                        {row.suppressed ? (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
+                            Skjult (&lt;{SUPPRESSION_THRESHOLD})
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-foreground">{row.avg?.toFixed(2)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link href={`/dmu/clubs/${row.clubId}`} className="text-sm font-semibold text-primary transition hover:text-primary/80">
+                          Åbn
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </article>
       </section>
 
-      <NextActionPanel {...nextAction} />
+      <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Spørgsmålsfordeling</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Søg og scan benchmarkspørgsmål hurtigt.</p>
+          </div>
+          <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
+            {benchmarkRows.length} spørgsmål
+          </span>
+        </div>
 
-      {/* DMU text question tile */}
-      {dmuImprovementQuestion && (
-        <section className="rounded-xl border bg-background p-6">
+        <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
+          <QuestionDistributionBoard rows={benchmarkRows} suppressionThreshold={SUPPRESSION_THRESHOLD} />
+        </div>
+      </section>
+
+      {dmuImprovementQuestion ? (
+        <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Åbent spørgsmål · DMU standard</p>
-              <h3 className="mt-1 text-base font-semibold">{dmuImprovementQuestion.title}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {improvementResponses.length} besvarelse{improvementResponses.length !== 1 ? "r" : ""} på tværs af alle klubber.
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Åbne svar</p>
+              <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground">{dmuImprovementQuestion.title}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Seneste signaler fra klubberne.</p>
             </div>
-            <TextResponsesModal
-              questionTitle={dmuImprovementQuestion.title}
-              responses={improvementResponses}
-              triggerLabel="Se besvarelser fra alle klubber"
-            />
+            <div className="flex items-center gap-3">
+              <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
+                {improvementResponses.length} svar
+              </span>
+              <TextResponsesModal questionTitle={dmuImprovementQuestion.title} responses={improvementResponses} triggerLabel="Se alle" />
+            </div>
           </div>
-          {/* Preview of 3 most recent */}
-          {improvementResponses.length > 0 && (
-            <div className="mt-4 space-y-2">
-              {improvementResponses.slice(0, 3).map((r, i) => (
-                <div key={i} className="rounded-lg border border-border/50 bg-muted/20 px-4 py-3">
-                  <p className="text-sm">{r.text}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    <span className="font-medium">{r.clubName}</span>
-                  </p>
-                </div>
+
+          {improvementResponses.length > 0 ? (
+            <div className="mt-5 grid gap-3 lg:grid-cols-3">
+              {improvementResponses.slice(0, 3).map((response, index) => (
+                <article key={`${response.submittedAt}-${index}`} className="rounded-[22px] border border-border/70 bg-background/85 p-4">
+                  <p className="text-sm leading-6 text-foreground">{response.text}</p>
+                  <p className="mt-3 text-xs font-medium text-muted-foreground">{response.clubName}</p>
+                </article>
               ))}
-              {improvementResponses.length > 3 && (
-                <p className="text-xs text-muted-foreground pl-1">
-                  + {improvementResponses.length - 3} flere besvarelser — åbn popup for at se alle.
-                </p>
-              )}
+            </div>
+          ) : (
+            <div className="mt-5 rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+              Ingen åbne svar i det valgte udsnit.
             </div>
           )}
         </section>
-      )}
-
-      <GettingStartedWizard
-        title="Kom i gang (valgfri guide)"
-        subtitle="Brug guiden som ny bruger, eller gå direkte til indstillinger i hvert trin."
-        steps={[
-          {
-            id: 1,
-            title: "Opret standardspørgsmål",
-            description: "Definér de centrale spørgsmål, klubberne skal kunne bruge.",
-            primaryCtaLabel: "Start trin 1",
-            primaryHref: "/dmu/questions",
-            settingsHref: "/dmu/questions",
-          },
-          {
-            id: 2,
-            title: "Byg spørgeskema-skabelon",
-            description: "Saml spørgsmål i en godkendt skabelon til årlige målinger eller arrangementer.",
-            primaryCtaLabel: "Start trin 2",
-            primaryHref: "/dmu/templates",
-            settingsHref: "/dmu/templates",
-          },
-          {
-            id: 3,
-            title: "Udsend og følg op",
-            description: "Overvåg udsendelser, og følg svar på tværs af klubber.",
-            primaryCtaLabel: "Start trin 3",
-            primaryHref: "/dmu/surveys",
-            settingsHref: "/dmu/outbox",
-          },
-        ]}
-      />
-
-      <section className="rounded-xl border bg-background p-6">
-        <h3 className="text-lg font-semibold">Spørgsmålsfordeling</h3>
-        <p className="text-sm text-muted-foreground">
-          {selectedTemplate ? `Valgt skabelon: ${selectedTemplate.name}. ` : ""}Fordeling af svar på skala 1-5, grupperet efter kategori.
-        </p>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {benchmarkRows.map((row) => (
-            <QuestionDistributionTile
-              key={row.questionTitle}
-              title={row.questionTitle}
-              category={row.category}
-              avg={row.avg}
-              count={row.count}
-              suppressed={row.suppressed}
-              data={row.distribution}
-              suppressionThreshold={SUPPRESSION_THRESHOLD}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section className="rounded-xl border bg-background p-6">
-        <h3 className="text-lg font-semibold">Klubsammenligning</h3>
-        <p className="text-sm text-muted-foreground">
-          {selectedTemplate ? `Sammenligning for skabelonen ${selectedTemplate.name}. ` : ""}Konkret klubvisning er kun synlig for DMU admin.
-        </p>
-
-        {clubComparisonRows.length > 0 ? <ClubComparisonChart data={clubComparisonRows} /> : <p className="mt-3 text-sm text-muted-foreground">For få data til graf.</p>}
-
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-4">Klub</th>
-                <th className="py-2 pr-4">Svar</th>
-                <th className="py-2 pr-4">Score</th>
-                <th className="py-2">Detalje</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clubTableRows.map((row) => (
-                <tr key={row.clubId} className="border-b">
-                  <td className="py-2 pr-4">{row.clubName}</td>
-                  <td className="py-2 pr-4">{row.count}</td>
-                  <td className="py-2 pr-4">{row.suppressed ? `Skjult (<${SUPPRESSION_THRESHOLD})` : row.avg?.toFixed(2)}</td>
-                  <td className="py-2">
-                    <Link href={`/dmu/clubs/${row.clubId}`} className="text-primary underline">
-                      Åbn klub
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      ) : null}
     </div>
   );
 }

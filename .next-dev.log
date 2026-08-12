@@ -1,0 +1,98 @@
+
+> dmu_demo_program@0.1.0 dev
+> next dev
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.0.0.4:3000
+- Environments: .env
+
+✓ Starting...
+Creating turbopack project {
+  dir: 'C:\\Users\\nickl\\OneDrive\\Desktop\\CBS\\4. semester\\Analyse og design af brugervenlige informationssystemer\\dmu_demo_program',
+  testMode: true
+}
+✓ Ready in 3.6s
+ GET /login 200 in 2.8s (compile: 1612ms, render: 1203ms)
+ GET /dmu/surveys 200 in 2.7s (compile: 367ms, render: 2.4s)
+ GET /dmu/questions 200 in 716ms (compile: 371ms, render: 346ms)
+ GET /dmu/dashboard 200 in 737ms (compile: 258ms, render: 480ms)
+ GET /dmu/questions 200 in 150ms (compile: 22ms, render: 127ms)
+ GET /dmu/surveys 200 in 306ms (compile: 16ms, render: 290ms)
+ GET /dmu/events 200 in 267ms (compile: 146ms, render: 121ms)
+ GET /dmu/outbox 200 in 370ms (compile: 204ms, render: 166ms)
+ GET /dmu/club-users 200 in 515ms (compile: 212ms, render: 303ms)
+✓ Compiled in 1477ms
+✓ Compiled in 754ms
+✓ Compiled in 275ms
+✓ Compiled in 235ms
+ GET /dmu/club-users 200 in 300ms (compile: 38ms, render: 262ms)
+✓ Compiled in 358ms
+ GET /dmu/club-users 200 in 179ms (compile: 13ms, render: 167ms)
+✓ Compiled in 189ms
+ GET /dmu/club-users 200 in 183ms (compile: 12ms, render: 172ms)
+✓ Compiled in 169ms
+ GET /dmu/club-users 200 in 132ms (compile: 9ms, render: 123ms)
+✓ Compiled in 331ms
+ GET /dmu/club-users 200 in 176ms (compile: 12ms, render: 164ms)
+✓ Compiled in 365ms
+ GET /dmu/club-users 200 in 176ms (compile: 12ms, render: 165ms)
+✓ Compiled in 376ms
+ GET /dmu/club-users 200 in 282ms (compile: 10ms, render: 272ms)
+✓ Compiled in 176ms
+ GET /dmu/club-users 200 in 686ms (compile: 264ms, render: 422ms)
+✓ Compiled in 319ms
+ GET /dmu/club-users 200 in 212ms (compile: 21ms, render: 191ms)
+ GET /dmu/club-users 200 in 1407ms (compile: 13ms, render: 1394ms)
+ GET /dmu/outbox 200 in 556ms (compile: 279ms, render: 277ms)
+ GET /dmu/events 200 in 1261ms (compile: 506ms, render: 755ms)
+ GET /dmu/surveys 200 in 684ms (compile: 27ms, render: 657ms)
+ GET /dmu/questions 200 in 1080ms (compile: 543ms, render: 537ms)
+ GET /dmu/surveys 200 in 286ms (compile: 17ms, render: 269ms)
+ GET /dmu/surveys 200 in 2.3s (compile: 29ms, render: 2.2s)
+ GET /dmu/surveys 200 in 822ms (compile: 236ms, render: 586ms)
+✓ Compiled in 148ms
+ GET /dmu/surveys 200 in 593ms (compile: 198ms, render: 395ms)
+ GET /dmu/surveys 200 in 758ms (compile: 224ms, render: 534ms)
+ GET /dmu/surveys 200 in 739ms (compile: 223ms, render: 515ms)
+ GET /dmu/surveys 200 in 822ms (compile: 229ms, render: 594ms)
+✓ Compiled in 212ms
+ GET /dmu/surveys 200 in 806ms (compile: 218ms, render: 588ms)
+✓ Compiled in 135ms
+ GET /dmu/surveys 200 in 813ms (compile: 234ms, render: 579ms)
+ GET /dmu/surveys 200 in 652ms (compile: 234ms, render: 418ms)
+ GET /dmu/dashboard 200 in 647ms (compile: 19ms, render: 628ms)
+ GET /dmu/questions 200 in 473ms (compile: 46ms, render: 427ms)
+ GET /dmu/surveys 200 in 760ms (compile: 15ms, render: 746ms)
+ GET /dmu/events 200 in 151ms (compile: 14ms, render: 137ms)
+ GET /dmu/outbox 200 in 164ms (compile: 9ms, render: 156ms)
+ POST /api/auth/logout 307 in 507ms (compile: 406ms, render: 101ms)
+ POST /login 200 in 747ms (compile: 14ms, render: 733ms)
+ POST /api/auth/login 307 in 1134ms (compile: 530ms, render: 604ms)
+ POST /club/overview 200 in 3.0s (compile: 782ms, render: 2.2s)
+ GET /club/dashboard 200 in 1389ms (compile: 537ms, render: 852ms)
+ GET /club/surveys 200 in 1911ms (compile: 1212ms, render: 699ms)
+✓ Compiled in 192ms
+ GET /club/surveys 200 in 259ms (compile: 14ms, render: 246ms)
+✓ Compiled in 177ms
+ GET /club/surveys 200 in 222ms (compile: 9ms, render: 213ms)
+✓ Compiled in 129ms
+ GET /club/surveys 200 in 218ms (compile: 14ms, render: 204ms)
+✓ Compiled in 136ms
+ GET /club/surveys 200 in 178ms (compile: 8ms, render: 170ms)
+✓ Compiled in 161ms
+ GET /club/surveys 200 in 244ms (compile: 10ms, render: 235ms)
+✓ Compiled in 135ms
+ GET /club/surveys 200 in 150ms (compile: 11ms, render: 139ms)
+✓ Compiled in 182ms
+ GET /club/surveys 200 in 291ms (compile: 10ms, render: 281ms)
+✓ Compiled in 166ms
+ GET /club/surveys 200 in 1404ms (compile: 419ms, render: 986ms)
+ GET /club/surveys 200 in 843ms (compile: 441ms, render: 403ms)
+✓ Compiled in 638ms
+ GET /club/questions 200 in 791ms (compile: 398ms, render: 393ms)
+ GET /club/events 200 in 864ms (compile: 446ms, render: 418ms)
+ GET /club/outbox 200 in 617ms (compile: 304ms, render: 314ms)
+ GET /club/dashboard 200 in 1409ms (compile: 688ms, render: 721ms)
+ GET /club/overview 200 in 698ms (compile: 45ms, render: 653ms)
+[?25h

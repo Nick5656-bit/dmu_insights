@@ -23,7 +23,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/club") && session.role !== "CLUB_ADMIN") {
-    return NextResponse.redirect(new URL("/dmu/dashboard", request.url));
+    return NextResponse.redirect(new URL("/dmu/overview", request.url));
   }
 
   return NextResponse.next();

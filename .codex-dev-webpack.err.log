@@ -1,0 +1,10 @@
+⚠ Invalid next.config.ts options detected: 
+⚠     Unrecognized key(s) in object: 'turbopack' at "experimental"
+⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\nickl\package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * C:\Users\nickl\OneDrive\Desktop\CBS\4. semester\Analyse og design af brugervenlige informationssystemer\dmu_demo_program\package-lock.json
+

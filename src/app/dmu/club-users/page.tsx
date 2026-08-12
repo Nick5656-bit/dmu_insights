@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DeleteClubUserButton } from "@/components/delete-club-user-button";
+import { EditClubUserButton } from "@/components/edit-club-user-button";
 
 export default async function DmuClubUsersPage({
   searchParams,
@@ -67,16 +68,60 @@ export default async function DmuClubUsersPage({
     redirect("/dmu/club-users?success=deleted");
   }
 
+  async function updateClubUser(formData: FormData) {
+    "use server";
+    await requireRole("DMU_ADMIN");
+
+    const userId = String(formData.get("userId") ?? "");
+    const name = String(formData.get("name") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const password = String(formData.get("password") ?? "");
+
+    if (!userId || !name || !email) {
+      redirect("/dmu/club-users?error=invalid_edit_input");
+    }
+
+    if (password && password.length < 6) {
+      redirect("/dmu/club-users?error=invalid_edit_password");
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.role !== "CLUB_ADMIN") {
+      redirect("/dmu/club-users?error=user_not_found");
+    }
+
+    const existingByEmail = await prisma.user.findUnique({ where: { email } });
+    if (existingByEmail && existingByEmail.id !== userId) {
+      redirect("/dmu/club-users?error=email_taken");
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name,
+        email,
+        ...(password ? { passwordHash: await bcrypt.hash(password, 10) } : {}),
+      },
+    });
+
+    revalidatePath("/dmu/club-users");
+    redirect("/dmu/club-users?success=updated");
+  }
+
   // ── Render ───────────────────────────────────────────────────────
 
   const errorMessages: Record<string, string> = {
     invalid_input: "Udfyld alle felter. Adgangskoden skal være mindst 6 tegn.",
+    invalid_edit_input: "Navn og e-mail skal udfyldes ved redigering.",
+    invalid_edit_password: "Ny adgangskode skal være mindst 6 tegn.",
     email_taken: "E-mailadressen er allerede registreret i systemet.",
+    user_not_found: "Brugeren blev ikke fundet.",
   };
 
   const successMessages: Record<string, string> = {
     created: "Brugeren er oprettet og kan nu logge ind.",
     deleted: "Brugeren er slettet.",
+    updated: "Brugeren er opdateret.",
   };
 
   const totalUsers = clubs.reduce((sum, c) => sum + c.users.length, 0);
@@ -85,7 +130,7 @@ export default async function DmuClubUsersPage({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <section className="rounded-xl border bg-background p-6">
+      <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75 [&_article]:rounded-[22px] [&_article]:border-white/12 [&_article]:bg-white/10">
         <h2 className="text-xl font-semibold">Klubbrugere</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Administrer login-adgang for klubformænd og -admins. Én klub kan have flere aktive brugere.
@@ -242,11 +287,19 @@ export default async function DmuClubUsersPage({
                             <td className="px-4 py-3 font-medium">{user.name}</td>
                             <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
                             <td className="px-4 py-3 text-right">
-                              <DeleteClubUserButton
-                                action={deleteClubUser}
-                                userId={user.id}
-                                userName={user.name}
-                              />
+                              <div className="flex items-center justify-end gap-2">
+                                <EditClubUserButton
+                                  action={updateClubUser}
+                                  userId={user.id}
+                                  userName={user.name}
+                                  userEmail={user.email}
+                                />
+                                <DeleteClubUserButton
+                                  action={deleteClubUser}
+                                  userId={user.id}
+                                  userName={user.name}
+                                />
+                              </div>
                             </td>
                           </tr>
                         ))}

@@ -20,20 +20,30 @@ export function NextActionPanel({
   secondaryHref,
 }: NextActionPanelProps) {
   return (
-    <section className="rounded-xl border bg-gradient-to-br from-background to-muted/20 p-6 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{eyebrow}</p>
-      <h3 className="mt-2 text-xl font-semibold tracking-tight">{title}</h3>
-      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
+    <section className="overflow-hidden rounded-[1.8rem] border border-border/75 bg-[linear-gradient(135deg,rgba(16,36,77,0.98),rgba(33,64,122,0.9))] p-6 text-primary-foreground shadow-[0_30px_60px_-42px_rgba(21,37,77,0.8)]">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-foreground/70">{eyebrow}</p>
+          <h3 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">{title}</h3>
+          <p className="mt-3 max-w-2xl text-sm text-primary-foreground/76">{description}</p>
+        </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link href={primaryHref} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          {primaryLabel}
-        </Link>
-        {secondaryLabel && secondaryHref ? (
-          <Link href={secondaryHref} className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">
-            {secondaryLabel}
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href={primaryHref}
+            className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-primary shadow-[0_16px_30px_-24px_rgba(255,255,255,0.65)] transition hover:bg-white/92"
+          >
+            {primaryLabel}
           </Link>
-        ) : null}
+          {secondaryLabel && secondaryHref ? (
+            <Link
+              href={secondaryHref}
+              className="rounded-full border border-white/16 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/8"
+            >
+              {secondaryLabel}
+            </Link>
+          ) : null}
+        </div>
       </div>
     </section>
   );

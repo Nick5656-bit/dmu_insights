@@ -115,6 +115,21 @@ model Club {
   surveyInstances SurveyInstance[]
   events          Event[]
   surveyResponses SurveyResponse[]
+  extraEmails     ClubExtraEmail[]
+}
+
+model ClubExtraEmail {
+  id        String   @id @default(cuid())
+  clubId    String
+  email     String
+  name      String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, email])
 }
 
 model Member {
@@ -169,6 +184,7 @@ model SurveyTemplate {
   name        String
   surveyType  SurveyType
   description String
+  layoutJson  Json?
   isActive    Boolean    @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
@@ -200,6 +216,8 @@ model SurveyInstance {
   status          SurveyStatus @default(DRAFT)
   eventId         String?
   createdByUserId String
+  clubReadyAt     DateTime?
+  clubReadyByUserId String?
   sentAt          DateTime?
   closesAt        DateTime?
   createdAt       DateTime     @default(now())
@@ -259,7 +277,7 @@ model ScheduledSend {
 model SurveyInvitation {
   id               String           @id @default(cuid())
   surveyInstanceId String
-  memberId         String
+  memberId         String?
   emailSnapshot    String
   token            String           @unique
   status           InvitationStatus @default(CREATED)
@@ -270,7 +288,7 @@ model SurveyInvitation {
   updatedAt        DateTime         @updatedAt
 
   surveyInstance SurveyInstance @relation(fields: [surveyInstanceId], references: [id], onDelete: Cascade)
-  member         Member         @relation(fields: [memberId], references: [id])
+  member         Member?        @relation(fields: [memberId], references: [id], onDelete: SetNull)
   mailLogs       MailLog[]
 }
 

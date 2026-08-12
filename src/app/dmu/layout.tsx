@@ -2,14 +2,23 @@ import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
 
 const dmuNavItems = [
-  { href: "/dmu/dashboard", label: "Overblik" },
-  { href: "/dmu/questions", label: "Standardspørgsmål" },
-  { href: "/dmu/templates", label: "Spørgeskema-skabeloner" },
-  { href: "/dmu/events", label: "Arrangementer" },
-  { href: "/dmu/surveys", label: "Spørgeskemaer" },
-  { href: "/dmu/outbox", label: "Udsendelser" },
-  { href: "/dmu/mail-log", label: "Mail-log" },
-  { href: "/dmu/club-users", label: "Klubbrugere" },
+  { href: "/dmu/overview", label: "Overblik", icon: "overview" as const },
+  { href: "/dmu/dashboard", label: "Dashboard", icon: "dashboard" as const },
+  {
+    href: "/dmu/questions",
+    label: "Spørgsmål & skabeloner",
+    activePrefixes: ["/dmu/questions", "/dmu/templates"],
+    icon: "content" as const,
+  },
+  { href: "/dmu/surveys", label: "Spørgeskemaer", icon: "surveys" as const },
+  { href: "/dmu/events", label: "Arrangementer", icon: "events" as const },
+  {
+    href: "/dmu/outbox",
+    label: "Udsendelser",
+    activePrefixes: ["/dmu/outbox", "/dmu/mail-log"],
+    icon: "deliveries" as const,
+  },
+  { href: "/dmu/club-users", label: "Klubbrugere", icon: "users" as const },
 ];
 
 export default async function DmuLayout({ children }: { children: React.ReactNode }) {

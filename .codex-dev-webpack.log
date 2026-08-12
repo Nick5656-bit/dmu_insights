@@ -1,0 +1,11 @@
+
+> dmu_demo_program@0.1.0 dev
+> next dev --webpack
+
+▲ Next.js 16.1.6 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://10.0.0.4:3000
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 2.9s

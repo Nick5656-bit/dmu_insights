@@ -2,14 +2,17 @@ import { AppShell } from "@/components/app-shell";
 import { requireRole } from "@/lib/auth";
 
 const clubNavItems = [
-  { href: "/club/overview", label: "Overblik" },
-  { href: "/club/dashboard", label: "Dashboard" },
-  { href: "/club/surveys", label: "Spørgeskemaer" },
-  { href: "/club/questions", label: "Spørgsmål" },
-  { href: "/club/events", label: "Arrangementer" },
-  { href: "/club/outbox", label: "Udsendelser" },
-  { href: "/club/mail-log", label: "Mail-log" },
-  { href: "/club/surveys/latest", label: "Seneste spørgeskema" },
+  { href: "/club/overview", label: "Overblik", icon: "overview" as const },
+  { href: "/club/dashboard", label: "Dashboard", icon: "dashboard" as const },
+  { href: "/club/surveys", label: "Spørgeskemaer", icon: "surveys" as const },
+  { href: "/club/questions", label: "Spørgsmål", icon: "questions" as const },
+  { href: "/club/events", label: "Arrangementer", icon: "events" as const },
+  {
+    href: "/club/outbox",
+    label: "Udsendelser",
+    activePrefixes: ["/club/outbox", "/club/mail-log"],
+    icon: "deliveries" as const,
+  },
 ];
 
 export default async function ClubLayout({ children }: { children: React.ReactNode }) {

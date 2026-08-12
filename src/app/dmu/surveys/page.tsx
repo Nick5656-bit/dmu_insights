@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CalendarDays, ClipboardList, SendHorizontal } from "lucide-react";
 import { SurveyStatus, SurveyType } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -27,6 +28,25 @@ const surveyStatusLabel: Record<SurveyStatus, string> = {
   CLOSED: "Lukket",
 };
 
+const surveyStatusTone: Record<SurveyStatus, string> = {
+  DRAFT: "bg-slate-100 text-slate-800",
+  SCHEDULED: "bg-sky-100 text-sky-900",
+  SENT: "bg-emerald-100 text-emerald-900",
+  CLOSED: "bg-stone-200 text-stone-900",
+};
+
+function formatDate(value: Date | null) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("da-DK", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(value);
+}
+
 type DmuSurveysPageProps = {
   searchParams: Promise<{ clubId?: string; surveyType?: string; status?: string; from?: string; to?: string }>;
 };
@@ -35,12 +55,12 @@ export default async function DmuSurveysPage({ searchParams }: DmuSurveysPagePro
   await requireRole("DMU_ADMIN");
   const params = await searchParams;
 
-  const [clubs, clubsForFilter] = await Promise.all([
-    prisma.club.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    prisma.club.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-  ]);
+  const clubs = await prisma.club.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+  });
 
-  const validClubIds = new Set(clubsForFilter.map((club) => club.id));
+  const validClubIds = new Set(clubs.map((club) => club.id));
   const clubIdFilter = params.clubId && validClubIds.has(params.clubId) ? params.clubId : undefined;
   const surveyTypeFilter = surveyTypeOptions.some((option) => option.value === params.surveyType) ? (params.surveyType as SurveyType) : undefined;
   const statusFilter = surveyStatusOptions.some((option) => option.value === params.status) ? (params.status as SurveyStatus) : undefined;
@@ -75,7 +95,7 @@ export default async function DmuSurveysPage({ searchParams }: DmuSurveysPagePro
         },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     take: 250,
   });
 
@@ -84,19 +104,82 @@ export default async function DmuSurveysPage({ searchParams }: DmuSurveysPagePro
   const scheduledCount = instances.filter((instance) => instance.status === "SCHEDULED").length;
   const sentCount = instances.filter((instance) => instance.status === "SENT").length;
   const closedCount = instances.filter((instance) => instance.status === "CLOSED").length;
-  const activeCount = instances.filter((instance) => instance.status !== "CLOSED").length;
   const totalInvitations = instances.reduce((sum, instance) => sum + instance._count.invitations, 0);
   const totalResponses = instances.reduce((sum, instance) => sum + instance._count.responses, 0);
-  const responseRate = totalInvitations > 0 ? (totalResponses / totalInvitations) * 100 : 0;
+  const responseRate = totalInvitations > 0 ? Math.round((totalResponses / totalInvitations) * 100) : 0;
+
+  const summaryCards = [
+    { label: "Spørgeskemaer", value: total, hint: "I det valgte udsnit" },
+    { label: "Planlagte", value: scheduledCount, hint: "Klar til udsendelse" },
+    { label: "Sendte", value: sentCount, hint: `${totalResponses} svar registreret` },
+    { label: "Svarrate", value: `${responseRate}%`, hint: `${totalInvitations} invitationer` },
+  ];
+
+  const selectedClubName = clubs.find((club) => club.id === clubIdFilter)?.name;
+  const activeFilters = [
+    selectedClubName ? `Klub: ${selectedClubName}` : null,
+    surveyTypeFilter ? `Type: ${surveyTypeLabel[surveyTypeFilter]}` : null,
+    statusFilter ? `Status: ${surveyStatusLabel[statusFilter]}` : null,
+    validFromDate ? `Fra: ${formatDate(validFromDate)}` : null,
+    params.to && validToDate ? `Til: ${formatDate(new Date(validToDate.getTime() - 24 * 60 * 60 * 1000))}` : null,
+  ].filter(Boolean) as string[];
+
+  const statusPills = [
+    { label: "Kladder", value: draftCount },
+    { label: "Planlagte", value: scheduledCount },
+    { label: "Sendte", value: sentCount },
+    { label: "Lukkede", value: closedCount },
+  ];
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border bg-background p-6">
-        <h2 className="text-xl font-semibold">DMU-spørgeskemaer</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Tværgående overblik over spørgeskemaer, status og svarprocenter på tværs af klubber.</p>
+      <section className="overflow-visible rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-3xl space-y-4">
+            <span className="inline-flex w-fit items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white/90">
+              Spørgeskemaer
+            </span>
+            <div className="space-y-2 text-white/75 [&_h1]:text-white [&_p]:text-white/75">
+              <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground md:text-4xl">Overblik på tværs af klubber</h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">Filtrér og følg status på alle spørgeskemaer ét sted.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {activeFilters.length > 0 ? (
+                activeFilters.map((filter) => (
+                  <span
+                    key={filter}
+                    className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85"
+                  >
+                    {filter}
+                  </span>
+                ))
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85">
+                  Alle klubber og alle statusser
+                </span>
+              )}
+            </div>
+          </div>
 
-        <form className="mt-4 grid gap-3 md:grid-cols-5" method="get">
-          <select name="clubId" defaultValue={clubIdFilter ?? ""} className="rounded-md border px-3 py-2 text-sm">
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/dmu/outbox"
+              className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-primary/90"
+            >
+              <SendHorizontal className="h-4 w-4" />
+              Udsendelser
+            </Link>
+            <Link
+              href="/dmu/events"
+              className="inline-flex h-11 items-center rounded-2xl border border-white/15 bg-white/10 px-5 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/16"
+            >
+              Arrangementer
+            </Link>
+          </div>
+        </div>
+
+        <form className="mt-6 grid gap-3 rounded-[24px] border border-white/12 bg-white/8 p-4 backdrop-blur-sm md:grid-cols-5" method="get">
+          <select name="clubId" defaultValue={clubIdFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground">
             <option value="">Alle klubber</option>
             {clubs.map((club) => (
               <option key={club.id} value={club.id}>
@@ -105,7 +188,7 @@ export default async function DmuSurveysPage({ searchParams }: DmuSurveysPagePro
             ))}
           </select>
 
-          <select name="surveyType" defaultValue={surveyTypeFilter ?? ""} className="rounded-md border px-3 py-2 text-sm">
+          <select name="surveyType" defaultValue={surveyTypeFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground">
             <option value="">Alle typer</option>
             {surveyTypeOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -114,7 +197,7 @@ export default async function DmuSurveysPage({ searchParams }: DmuSurveysPagePro
             ))}
           </select>
 
-          <select name="status" defaultValue={statusFilter ?? ""} className="rounded-md border px-3 py-2 text-sm">
+          <select name="status" defaultValue={statusFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground">
             <option value="">Alle statusser</option>
             {surveyStatusOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -123,121 +206,146 @@ export default async function DmuSurveysPage({ searchParams }: DmuSurveysPagePro
             ))}
           </select>
 
-          <input type="date" name="from" defaultValue={params.from ?? ""} className="rounded-md border px-3 py-2 text-sm" />
-          <input type="date" name="to" defaultValue={params.to ?? ""} className="rounded-md border px-3 py-2 text-sm" />
+          <input type="date" name="from" defaultValue={params.from ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground" />
+          <input type="date" name="to" defaultValue={params.to ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground" />
 
-          <div className="md:col-span-5 flex gap-2">
-            <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-              Anvend filtre
+          <div className="flex gap-3 md:col-span-5">
+            <button
+              type="submit"
+              className="h-11 rounded-2xl bg-white px-5 text-sm font-semibold text-primary shadow-sm transition hover:-translate-y-0.5 hover:bg-white/92"
+            >
+              Opdater
             </button>
-            <Link href="/dmu/surveys" className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">
+            <Link
+              href="/dmu/surveys"
+              className="flex h-11 items-center justify-center rounded-2xl border border-white/15 px-5 text-sm font-medium text-white/85 transition hover:bg-white/10"
+            >
               Nulstil
             </Link>
           </div>
         </form>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">I alt</p>
-          <p className="mt-1 text-2xl font-semibold">{total}</p>
-        </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Aktive</p>
-          <p className="mt-1 text-2xl font-semibold">{activeCount}</p>
-        </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Kladder</p>
-          <p className="mt-1 text-2xl font-semibold">{draftCount}</p>
-        </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Planlagte</p>
-          <p className="mt-1 text-2xl font-semibold">{scheduledCount}</p>
-        </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Sendte</p>
-          <p className="mt-1 text-2xl font-semibold">{sentCount}</p>
-        </article>
-        <article className="rounded-xl border bg-background p-4">
-          <p className="text-sm text-muted-foreground">Lukkede</p>
-          <p className="mt-1 text-2xl font-semibold">{closedCount}</p>
-        </article>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {summaryCards.map((card) => (
+          <article key={card.label} className="rounded-[24px] border border-border/70 bg-card p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">{card.label}</p>
+            <p className="mt-3 font-heading text-3xl font-semibold tracking-tight text-foreground">{card.value}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{card.hint}</p>
+          </article>
+        ))}
       </section>
 
-      <section className="rounded-xl border bg-background p-6">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <article className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Invitationer</p>
-            <p className="text-lg font-semibold">{totalInvitations}</p>
-          </article>
-          <article className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Svar</p>
-            <p className="text-lg font-semibold">{totalResponses}</p>
-          </article>
-          <article className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Svarprocent</p>
-            <p className="text-lg font-semibold">{responseRate.toFixed(1)}%</p>
-          </article>
+      <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Seneste spørgeskemaer</h2>
+            <p className="mt-1 text-sm text-muted-foreground">De seneste 250 spørgeskemaer i det valgte udsnit.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {statusPills.map((item) => (
+              <span
+                key={item.label}
+                className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground"
+              >
+                <span>{item.label}</span>
+                <span className="font-semibold text-foreground">{item.value}</span>
+              </span>
+            ))}
+          </div>
         </div>
-      </section>
 
-      <section className="rounded-xl border bg-background p-6">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1100px] text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-4">Spørgeskema</th>
-                <th className="py-2 pr-4">Klub</th>
-                <th className="py-2 pr-4">Type</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Invitationer</th>
-                <th className="py-2 pr-4">Svar</th>
-                <th className="py-2 pr-4">Svarprocent</th>
-                <th className="py-2 pr-4">Oprettet</th>
-                <th className="py-2 pr-4">Sendt</th>
-                <th className="py-2">Handlinger</th>
-              </tr>
-            </thead>
-            <tbody>
-              {instances.map((instance) => {
-                const invitationCount = instance._count.invitations;
-                const responseCount = instance._count.responses;
-                const rate = invitationCount > 0 ? (responseCount / invitationCount) * 100 : 0;
+        {instances.length > 0 ? (
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            {instances.map((instance) => {
+              const invitationCount = instance._count.invitations;
+              const responseCount = instance._count.responses;
+              const rate = invitationCount > 0 ? Math.round((responseCount / invitationCount) * 100) : 0;
+              const TypeIcon = instance.surveyType === "EVENT" ? CalendarDays : ClipboardList;
+              const accentClass = instance.surveyType === "EVENT" ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700";
 
-                return (
-                  <tr key={instance.id} className="border-b align-top">
-                    <td className="py-2 pr-4 font-medium">{instance.name}</td>
-                    <td className="py-2 pr-4">{instance.club.name}</td>
-                    <td className="py-2 pr-4">{surveyTypeLabel[instance.surveyType]}</td>
-                    <td className="py-2 pr-4">{surveyStatusLabel[instance.status]}</td>
-                    <td className="py-2 pr-4">{invitationCount}</td>
-                    <td className="py-2 pr-4">{responseCount}</td>
-                    <td className="py-2 pr-4">{rate.toFixed(1)}%</td>
-                    <td className="py-2 pr-4 text-muted-foreground">{new Date(instance.createdAt).toLocaleDateString("da-DK")}</td>
-                    <td className="py-2 pr-4 text-muted-foreground">{instance.sentAt ? new Date(instance.sentAt).toLocaleDateString("da-DK") : "-"}</td>
-                    <td className="py-2">
-                      <div className="flex flex-wrap gap-2">
-                        <Link href={`/dmu/clubs/${instance.club.id}`} className="text-primary underline">
-                          Åbn klub
-                        </Link>
-                        <Link href="/dmu/outbox" className="text-primary underline">
-                          Udsendelser
-                        </Link>
-                        {instance.eventId ? (
-                          <Link href="/dmu/events" className="text-primary underline">
-                            Arrangement
-                          </Link>
-                        ) : null}
+              return (
+                <article key={instance.id} className="rounded-[24px] border border-border/70 bg-background/90 p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className={`inline-flex rounded-2xl p-3 ${accentClass}`}>
+                        <TypeIcon className="h-5 w-5" />
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-semibold text-foreground">{instance.name}</h3>
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${surveyStatusTone[instance.status]}`}>
+                            {surveyStatusLabel[instance.status]}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{instance.club.name}</p>
+                      </div>
+                    </div>
+                    <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
+                      {surveyTypeLabel[instance.surveyType]}
+                    </span>
+                  </div>
 
-          {instances.length === 0 ? <p className="text-sm text-muted-foreground">Ingen spørgeskemaer matcher de valgte filtre.</p> : null}
-        </div>
+                  <div className="mt-5 grid gap-4 sm:grid-cols-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Invitationer</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{invitationCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Svar</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{responseCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Svarrate</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{rate}%</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendt</p>
+                      <p className="mt-2 text-sm font-semibold text-foreground">{formatDate(instance.sentAt)}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Responseniveau</span>
+                      <span>{responseCount} af {invitationCount || 0}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted/60">
+                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(rate, 100)}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                      <p>Oprettet {formatDate(instance.createdAt)}</p>
+                      <p>Senest aktivitet {formatDate(instance.updatedAt)}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href="/dmu/outbox"
+                        className="inline-flex h-11 items-center rounded-2xl border border-border/70 px-4 text-sm font-semibold text-foreground transition hover:bg-muted/40"
+                      >
+                        Udsendelser
+                      </Link>
+                      {instance.eventId ? (
+                        <Link
+                          href="/dmu/events"
+                          className="inline-flex h-11 items-center rounded-2xl border border-border/70 px-4 text-sm font-semibold text-foreground transition hover:bg-muted/40"
+                        >
+                          Arrangement
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+            Ingen spørgeskemaer matcher filtrene.
+          </div>
+        )}
       </section>
     </div>
   );

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DmuLogo } from "@/components/dmu-logo";
@@ -17,80 +18,102 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const error = params.error ? errorMessages[params.error] : undefined;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-muted/30 via-background to-background p-4">
-      <div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-6xl gap-6 rounded-3xl border bg-background p-6 shadow-sm lg:grid-cols-[1fr_430px]">
-        <section className="rounded-2xl border bg-muted/10 p-8">
-          <span className="inline-flex rounded-full border bg-background px-3 py-1 text-xs font-medium text-muted-foreground">Universitetsprototype · DMU</span>
-          <DmuLogo />
-          <h1 className="mt-8 text-3xl font-semibold tracking-tight">Medlemsfeedback for Danmarks Motor Union</h1>
-          <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-            Denne prototype understøtter løbende medlemsfeedback via klubberne med anonym analyse, sammenligning og arrangement-baserede spørgeskemaer.
-          </p>
-
-          <div className="mt-8 grid gap-3 sm:grid-cols-2">
-            <article className="rounded-lg border bg-background p-4">
-              <p className="text-sm font-medium">DMU Admin</p>
-              <p className="mt-1 text-xs text-muted-foreground">Centrale spørgsmål, skabeloner, arrangementer og tværgående overblik.</p>
-            </article>
-            <article className="rounded-lg border bg-background p-4">
-              <p className="text-sm font-medium">Klub Admin</p>
-              <p className="mt-1 text-xs text-muted-foreground">Egne spørgeskemaer, udsendelser, arrangementstatus og sammenligning med samlet gennemsnit.</p>
-            </article>
+    <div className="min-h-screen px-4 py-4">
+      <div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1460px] overflow-hidden rounded-[2.25rem] border border-border/75 bg-background/84 shadow-[0_38px_90px_-48px_rgba(21,37,77,0.55)] backdrop-blur lg:grid-cols-[1.02fr_0.98fr]">
+        <section className="relative hidden overflow-hidden border-r border-white/10 p-8 text-primary-foreground lg:flex lg:flex-col xl:p-12">
+          <div className="absolute inset-0">
+            <Image
+              src="/login_pic.png"
+              alt="Motocross-kører i luften"
+              fill
+              priority
+              className="object-cover"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(160deg,rgba(11,31,68,0.84),rgba(23,56,111,0.74))]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(116,214,213,0.16),transparent_26%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.08),transparent_28%)]" />
           </div>
+
+          <div className="relative z-10 flex h-full flex-col justify-between">
+            <DmuLogo compact surface="card" />
+            <div className="mt-10 max-w-xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-primary-foreground/68">DMU Medlemsfeedback</p>
+              <h1 className="mt-5 text-5xl font-bold leading-[0.96] tracking-[-0.05em] xl:text-7xl">
+                Få overblik.
+                <br />
+                Tag næste skridt.
+              </h1>
+              <p className="mt-5 max-w-md text-sm text-primary-foreground/76">Ét arbejdsrum for DMU og klubber.</p>
+            </div>
+          </div>
+
         </section>
 
-        <section className="rounded-2xl border bg-background p-6 shadow-sm">
-          <h2 className="text-xl font-semibold">Log ind</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Fortsæt som DMU admin eller klub admin.</p>
-
-          <form className="mt-6 space-y-4" method="post" action="/api/auth/login">
-            <div className="space-y-1">
-              <label htmlFor="email" className="text-sm font-medium">
-                E-mail
-              </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="admin@dmu.dk"
-              />
+        <section className="flex flex-col justify-between p-6 sm:p-8 lg:p-10 xl:p-14">
+          <div className="mx-auto w-full max-w-[32rem]">
+            <div className="lg:hidden">
+              <DmuLogo />
             </div>
 
-            <div className="space-y-1">
-              <label htmlFor="password" className="text-sm font-medium">
-                Adgangskode
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="••••••••"
-              />
+            <div className="mt-8 lg:mt-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Login</p>
+              <h2 className="mt-3 text-4xl font-bold tracking-[-0.04em] text-foreground">Velkommen</h2>
+              <p className="mt-3 text-sm text-muted-foreground">Brug din administratorbruger.</p>
             </div>
 
-            {error ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
+            <form className="mt-8 rounded-[1.8rem] border bg-background/88 p-6 shadow-[0_24px_60px_-44px_rgba(21,37,77,0.45)]" method="post" action="/api/auth/login">
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="email" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    E-mail
+                  </label>
+                  <input id="email" name="email" type="email" required autoComplete="email" placeholder="E-mail" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="password" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    Adgangskode
+                  </label>
+                  <input id="password" name="password" type="password" required autoComplete="current-password" placeholder="Adgangskode" />
+                </div>
               </div>
-            ) : null}
 
-            <Button className="w-full" type="submit">
-              Log ind
-            </Button>
-          </form>
+              {error ? (
+                <div className="mt-4 rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {error}
+                </div>
+              ) : null}
 
-          <div className="mt-6 rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">Demo-login</p>
-            <p>DMU admin: admin@dmu.dk / demo1234</p>
-            <p>Klub admin: klub1@dmu.dk / demo1234</p>
-            <p className="mt-1">
-              Offentligt eksempel-link: <Link className="underline" href="/survey/demo-token">/survey/demo-token</Link>
-            </p>
+              <Button className="mt-5 w-full" size="default" type="submit">
+                Log ind
+              </Button>
+            </form>
+
+            <div className="mt-5 rounded-[1.6rem] border bg-muted/22 p-5 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-semibold text-foreground">Demo-login</p>
+                <Link href="/survey/demo-token" className="rounded-full border px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-background">
+                  Survey-link
+                </Link>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <article className="rounded-[1.2rem] border bg-background/90 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">DMU</p>
+                  <p className="mt-2 font-medium text-foreground">admin@dmu.dk</p>
+                  <p className="text-muted-foreground">demo1234</p>
+                </article>
+                <article className="rounded-[1.2rem] border bg-background/90 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Klub</p>
+                  <p className="mt-2 font-medium text-foreground">klub1@dmu.dk</p>
+                  <p className="text-muted-foreground">demo1234</p>
+                </article>
+              </div>
+            </div>
           </div>
+
+          <footer className="mx-auto mt-10 w-full max-w-[32rem] text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+            DMU medlemsfeedback
+          </footer>
         </section>
       </div>
     </div>

@@ -1,0 +1,21 @@
+⚠ Invalid next.config.ts options detected: 
+⚠     Unrecognized key(s) in object: 'turbopack' at "experimental"
+⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\nickl\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\nickl\OneDrive\Desktop\CBS\4. semester\Analyse og design af brugervenlige informationssystemer\dmu_demo_program\package-lock.json
+
+
+-----
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred. A panic log has been written to C:\Users\nickl\AppData\Local\Temp\next-panic-18983a7c96979fb8f33bcf39468d0afd.log.
+
+To help make Turbopack better, report this error by clicking here: https://github.com/vercel/next.js/discussions/new?category=turbopack-error-report&title=Turbopack%20Error%3A%20Error%20in%20watcher%3A%20Error%20%7B%20kind%3A%20PathNotFound%2C%20paths%3A%20%5B%22C%3A%5C%5CUsers%5C%5Cnickl%22%5D%20%7D&body=Turbopack%20version%3A%20%6023c46498%60%0ANext.js%20version%3A%20%600.0.0%60%0A%0AError%20message%3A%0A%60%60%60%0ATurbopack%20Error%3A%20Error%20in%20watcher%3A%20Error%20%7B%20kind%3A%20PathNotFound%2C%20paths%3A%20%5B%22C%3A%5C%5CUsers%5C%5Cnickl%22%5D%20%7D%0A%60%60%60&labels=Turbopack,Turbopack%20Panic%20Backtrace
+-----
+
+Error [TurbopackInternalError]: Error in watcher: Error { kind: PathNotFound, paths: ["C:\\Users\\nickl"] }
+    at <unknown> (TurbopackInternalError: Error in watcher: Error { kind: PathNotFound, paths: ["C:\\Users\\nickl"] }) {
+  location: undefined
+}
