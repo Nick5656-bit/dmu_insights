@@ -106,58 +106,50 @@ export default async function DmuMailLogPage({
     })
   );
 
-  let detailedLogs:
-    | Awaited<
-        ReturnType<typeof prisma.mailLog.findMany>
-      >
-    | [] = [];
+  let detailedWhereInvitationIds: string[] | null = null;
+  if (clubId) {
+    const instances = await prisma.surveyInstance.findMany({
+      where: { clubId },
+      select: { id: true },
+    });
 
-  if (shouldShowDetails) {
-    let detailedWhereInvitationIds: string[] | null = null;
-    if (clubId) {
-      const instances = await prisma.surveyInstance.findMany({
-        where: { clubId },
-        select: { id: true },
-      });
-
-      const instanceIds = instances.map((instance) => instance.id);
-      detailedWhereInvitationIds =
-        instanceIds.length === 0
-          ? []
-          : (
-              await prisma.surveyInvitation.findMany({
-                where: { surveyInstanceId: { in: instanceIds } },
-                select: { id: true },
-              })
-            ).map((invitation) => invitation.id);
-    }
-
-    detailedLogs =
-      detailedWhereInvitationIds !== null && detailedWhereInvitationIds.length === 0
+    const instanceIds = instances.map((instance) => instance.id);
+    detailedWhereInvitationIds =
+      instanceIds.length === 0
         ? []
-        : await prisma.mailLog.findMany({
-            where: {
-              ...(detailedWhereInvitationIds ? { surveyInvitationId: { in: detailedWhereInvitationIds } } : {}),
-              ...(mailStatusFilter ? { status: mailStatusFilter } : {}),
-              ...(responseStateFilter === "ANSWERED"
-                ? { surveyInvitation: { status: "ANSWERED" } }
-                : responseStateFilter === "NOT_ANSWERED"
-                  ? { surveyInvitation: { status: { in: ["CREATED", "SENT", "OPENED"] } } }
-                  : {}),
-            },
-            include: {
-              surveyInvitation: {
-                include: {
-                  surveyInstance: {
-                    include: { club: true },
-                  },
+        : (
+            await prisma.surveyInvitation.findMany({
+              where: { surveyInstanceId: { in: instanceIds } },
+              select: { id: true },
+            })
+          ).map((invitation) => invitation.id);
+  }
+
+  const detailedLogs =
+    !shouldShowDetails || (detailedWhereInvitationIds !== null && detailedWhereInvitationIds.length === 0)
+      ? []
+      : await prisma.mailLog.findMany({
+          where: {
+            ...(detailedWhereInvitationIds ? { surveyInvitationId: { in: detailedWhereInvitationIds } } : {}),
+            ...(mailStatusFilter ? { status: mailStatusFilter } : {}),
+            ...(responseStateFilter === "ANSWERED"
+              ? { surveyInvitation: { status: "ANSWERED" } }
+              : responseStateFilter === "NOT_ANSWERED"
+                ? { surveyInvitation: { status: { in: ["CREATED", "SENT", "OPENED"] } } }
+                : {}),
+          },
+          include: {
+            surveyInvitation: {
+              include: {
+                surveyInstance: {
+                  include: { club: true },
                 },
               },
             },
-            orderBy: { sentAt: "desc" },
-            take: 100,
-          });
-  }
+          },
+          orderBy: { sentAt: "desc" },
+          take: 100,
+        });
 
   const selectedClub = clubId ? clubs.find((club) => club.id === clubId) : null;
   const hasActiveFilters = Boolean(clubId || mailStatusFilter || responseStateFilter);

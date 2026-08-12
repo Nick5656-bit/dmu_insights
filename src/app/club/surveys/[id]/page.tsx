@@ -207,10 +207,6 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
       return;
     }
 
-    if (currentSurvey.status === "SENT" || currentSurvey.status === "CLOSED" || currentSurvey.surveyType === "EVENT") {
-      return;
-    }
-
     const [members, extraEmails] = await Promise.all([
       prisma.member.findMany({
         where: {
