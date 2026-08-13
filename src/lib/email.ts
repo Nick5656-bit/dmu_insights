@@ -1,20 +1,15 @@
-import { Resend } from "resend";
-
-const getResend = () => {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error("RESEND_API_KEY er ikke konfigureret.");
+const getBrevoApiKey = () => {
+  const key = process.env.BREVO_API_KEY;
+  if (!key) {
+    throw new Error("BREVO_API_KEY er ikke konfigureret.");
   }
-  return new Resend(apiKey);
+  return key;
 };
 
-const getAppUrl = () => {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-};
+const getAppUrl = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
-const getFromAddress = () => {
-  return process.env.SMTP_FROM ?? "DMU Feedback <noreply@resend.dev>";
-};
+const getFromAddress = () =>
+  process.env.SMTP_FROM ?? "DMU Feedback <noreply@dmu.dk>";
 
 export type SendSurveyInvitationParams = {
   toEmail: string;
@@ -28,6 +23,12 @@ export async function sendSurveyInvitation({
   token,
 }: SendSurveyInvitationParams): Promise<{ success: boolean; error?: string }> {
   const surveyUrl = `${getAppUrl()}/survey/${token}`;
+  const fromRaw = getFromAddress();
+
+  // Parse "Navn <email@domane.dk>" format
+  const fromMatch = fromRaw.match(/^(.*?)\s*<(.+?)>$/);
+  const senderName = fromMatch ? fromMatch[1].trim() : "DMU Feedback";
+  const senderEmail = fromMatch ? fromMatch[2].trim() : fromRaw;
 
   const html = `
 <!DOCTYPE html>
@@ -35,7 +36,7 @@ export async function sendSurveyInvitation({
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Du er inviteret til at give din mening</title>
+  <title>Din mening om ${surveyName}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 0;">
@@ -64,7 +65,7 @@ export async function sendSurveyInvitation({
               <!-- CTA Button -->
               <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
                 <tr>
-                  <td style="background:#10244D;border-radius:10px;padding:0;">
+                  <td style="background:#10244D;border-radius:10px;">
                     <a href="${surveyUrl}" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:10px;">
                       Besvar undersøgelsen →
                     </a>
@@ -72,7 +73,7 @@ export async function sendSurveyInvitation({
                 </tr>
               </table>
 
-              <!-- Info boxes -->
+              <!-- Info box -->
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="background:#f4f4f5;border-radius:10px;padding:16px 20px;">
@@ -122,18 +123,26 @@ Danmarks Motor Union
   `.trim();
 
   try {
-    const resend = getResend();
-    const { error } = await resend.emails.send({
-      from: getFromAddress(),
-      to: toEmail,
-      subject: `Din mening om ${surveyName}`,
-      html,
-      text,
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": getBrevoApiKey(),
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: toEmail }],
+        subject: `Din mening om ${surveyName}`,
+        htmlContent: html,
+        textContent: text,
+      }),
     });
 
-    if (error) {
-      console.error(`[email] Fejl ved afsendelse til ${toEmail}:`, error);
-      return { success: false, error: error.message };
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(`[email] Brevo fejl (${response.status}):`, errorBody);
+      return { success: false, error: `HTTP ${response.status}: ${errorBody}` };
     }
 
     return { success: true };
