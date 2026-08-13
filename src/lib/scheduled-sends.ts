@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { sendSurveyInvitation } from "@/lib/email";
 
 export async function processDueScheduledSends(selectedScheduledSendIds?: string[]) {
   const now = new Date();
@@ -86,14 +87,20 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
         },
       });
 
+      const emailResult = await sendSurveyInvitation({
+        toEmail: member.email,
+        surveyName: surveyInstance.name,
+        token,
+      });
+
       await prisma.mailLog.create({
         data: {
           surveyInvitationId: invitation.id,
           toEmail: member.email,
-          subject: `Event-survey: ${surveyInstance.name}`,
-          bodyPreview: `Besvar anonymt via link: /survey/${token}`,
+          subject: `Din mening om ${surveyInstance.name}`,
+          bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
           sentAt: now,
-          status: "SENT",
+          status: emailResult.success ? "SENT" : "FAILED",
         },
       });
 
@@ -122,14 +129,20 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
         },
       });
 
+      const extraEmailResult = await sendSurveyInvitation({
+        toEmail: normalizedEmail,
+        surveyName: surveyInstance.name,
+        token,
+      });
+
       await prisma.mailLog.create({
         data: {
           surveyInvitationId: invitation.id,
           toEmail: normalizedEmail,
-          subject: `Event-survey: ${surveyInstance.name}`,
-          bodyPreview: `Besvar anonymt via link: /survey/${token}`,
+          subject: `Din mening om ${surveyInstance.name}`,
+          bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
           sentAt: now,
-          status: "SENT",
+          status: extraEmailResult.success ? "SENT" : "FAILED",
         },
       });
 
