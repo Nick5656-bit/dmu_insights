@@ -19,6 +19,7 @@ const dmuNavItems = [
     icon: "deliveries" as const,
   },
   { href: "/dmu/club-users", label: "Klubbrugere", icon: "users" as const },
+  { href: "/dmu/members", label: "Medlemmer", icon: "users" as const },
 ];
 
 export default async function DmuLayout({ children }: { children: React.ReactNode }) {
