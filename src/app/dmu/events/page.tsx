@@ -145,6 +145,9 @@ export default async function DmuEventsPage({ searchParams }: DmuEventsPageProps
         status: "SCHEDULED",
         eventId: event.id,
         createdByUserId: currentSession.userId,
+        // PILOT: Auto-klarmelding – DMU varetager dette i stedet for klubben.
+        // Fjern linjen nedenfor for at give klubben klarmelding tilbage.
+        clubReadyAt: new Date(),
       },
     });
 
