@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const tabs = [
-  { href: "/dmu/outbox", label: "Oversigt" },
-  { href: "/dmu/mail-log", label: "Mailhistorik" },
+  { href: "/dmu/settings/sends", label: "Tidligere udsendelser" },
+  { href: "/dmu/settings/mail-log", label: "Mailhistorik" },
 ];
 
 type DmuDeliveryTabsProps = {

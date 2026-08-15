@@ -67,7 +67,7 @@ export default async function DmuOutboxDetailPage({ params }: { params: Promise<
             <h2 className="text-2xl font-semibold">{surveyInstance.name}</h2>
             <p className="mt-2 text-sm text-muted-foreground">Klub: {surveyInstance.club.name}</p>
           </div>
-          <Link href="/dmu/outbox" className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
+          <Link href="/dmu/settings/sends" className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
             ← Tilbage til oversigt
           </Link>
         </div>

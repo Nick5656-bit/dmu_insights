@@ -29,8 +29,8 @@ const memberRoleOptions: { value: MemberRole; label: string }[] = [
 ];
 
 const surveyActionLinks = [
-  { href: "/dmu/overview", label: "Overblik" },
-  { href: "/dmu/surveys", label: "Spørgeskemaer" },
+  { href: "/dmu/send", label: "Udsend spørgeskema" },
+  { href: "/dmu/calendar", label: "Kalender" },
 ];
 
 type DmuDashboardProps = {

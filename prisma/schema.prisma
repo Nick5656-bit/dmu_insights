@@ -260,7 +260,21 @@ model Event {
 
   club            Club             @relation(fields: [clubId], references: [id])
   createdByUser   User             @relation(fields: [createdByUserId], references: [id])
+  participants    EventParticipant[]
   surveyInstances SurveyInstance[]
+}
+
+model EventParticipant {
+  id        String   @id @default(cuid())
+  eventId   String
+  email     String
+  name      String?
+  createdAt DateTime @default(now())
+
+  event             Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  surveyInvitations SurveyInvitation[]
+
+  @@unique([eventId, email])
 }
 
 model ScheduledSend {
@@ -278,6 +292,7 @@ model SurveyInvitation {
   id               String           @id @default(cuid())
   surveyInstanceId String
   memberId         String?
+  eventParticipantId String?
   emailSnapshot    String
   token            String           @unique
   status           InvitationStatus @default(CREATED)
@@ -289,6 +304,7 @@ model SurveyInvitation {
 
   surveyInstance SurveyInstance @relation(fields: [surveyInstanceId], references: [id], onDelete: Cascade)
   member         Member?        @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  eventParticipant EventParticipant? @relation(fields: [eventParticipantId], references: [id], onDelete: SetNull)
   mailLogs       MailLog[]
 }
 

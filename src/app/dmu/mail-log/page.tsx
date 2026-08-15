@@ -209,7 +209,7 @@ export default async function DmuMailLogPage({
                     <td className="py-3 pr-6 text-muted-foreground">{lastSentAt ? formatDateShort(lastSentAt) : "Ingen mails"}</td>
                     <td className="py-3">
                       {total > 0 && (
-                        <Link href={`/dmu/mail-log?clubId=${club.id}&show=1`} className="rounded-md border border-border px-3 py-1 text-xs hover:bg-muted">
+                        <Link href={`/dmu/settings/mail-log?clubId=${club.id}&show=1`} className="rounded-md border border-border px-3 py-1 text-xs hover:bg-muted">
                           Se mails →
                         </Link>
                       )}
@@ -275,7 +275,7 @@ export default async function DmuMailLogPage({
 
             {(shouldShowDetails || hasActiveFilters) && (
               <Link
-                href="/dmu/mail-log"
+                href="/dmu/settings/mail-log"
                 className="flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm text-muted-foreground hover:bg-muted"
               >
                 Nulstil
@@ -314,7 +314,7 @@ export default async function DmuMailLogPage({
                     <td className="py-3 pr-4 text-muted-foreground">{log.toEmail}</td>
                     {!selectedClub && (
                       <td className="py-3 pr-4 font-medium">
-                        <Link href={`/dmu/mail-log?clubId=${log.surveyInvitation.surveyInstance.clubId}&show=1`} className="hover:underline">
+                        <Link href={`/dmu/settings/mail-log?clubId=${log.surveyInvitation.surveyInstance.clubId}&show=1`} className="hover:underline">
                           {log.surveyInvitation.surveyInstance.club.name}
                         </Link>
                       </td>

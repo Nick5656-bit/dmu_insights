@@ -38,12 +38,12 @@ export default async function DmuClubUsersPage({
     const password = formData.get("password") as string;
 
     if (!clubId || !name || !email || !password || password.length < 6) {
-      redirect("/dmu/club-users?error=invalid_input");
+      redirect("/dmu/settings/club-users?error=invalid_input");
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      redirect("/dmu/club-users?error=email_taken");
+      redirect("/dmu/settings/club-users?error=email_taken");
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -51,8 +51,8 @@ export default async function DmuClubUsersPage({
       data: { name, email, passwordHash, role: "CLUB_ADMIN", clubId },
     });
 
-    revalidatePath("/dmu/club-users");
-    redirect("/dmu/club-users?success=created");
+    revalidatePath("/dmu/settings/club-users");
+    redirect("/dmu/settings/club-users?success=created");
   }
 
   async function deleteClubUser(formData: FormData) {
@@ -64,8 +64,8 @@ export default async function DmuClubUsersPage({
 
     await prisma.user.delete({ where: { id: userId } });
 
-    revalidatePath("/dmu/club-users");
-    redirect("/dmu/club-users?success=deleted");
+    revalidatePath("/dmu/settings/club-users");
+    redirect("/dmu/settings/club-users?success=deleted");
   }
 
   async function updateClubUser(formData: FormData) {
@@ -78,21 +78,21 @@ export default async function DmuClubUsersPage({
     const password = String(formData.get("password") ?? "");
 
     if (!userId || !name || !email) {
-      redirect("/dmu/club-users?error=invalid_edit_input");
+      redirect("/dmu/settings/club-users?error=invalid_edit_input");
     }
 
     if (password && password.length < 6) {
-      redirect("/dmu/club-users?error=invalid_edit_password");
+      redirect("/dmu/settings/club-users?error=invalid_edit_password");
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.role !== "CLUB_ADMIN") {
-      redirect("/dmu/club-users?error=user_not_found");
+      redirect("/dmu/settings/club-users?error=user_not_found");
     }
 
     const existingByEmail = await prisma.user.findUnique({ where: { email } });
     if (existingByEmail && existingByEmail.id !== userId) {
-      redirect("/dmu/club-users?error=email_taken");
+      redirect("/dmu/settings/club-users?error=email_taken");
     }
 
     await prisma.user.update({
@@ -104,8 +104,8 @@ export default async function DmuClubUsersPage({
       },
     });
 
-    revalidatePath("/dmu/club-users");
-    redirect("/dmu/club-users?success=updated");
+    revalidatePath("/dmu/settings/club-users");
+    redirect("/dmu/settings/club-users?success=updated");
   }
 
   // ── Render ───────────────────────────────────────────────────────

@@ -24,131 +24,182 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
   let processedCount = 0;
   let invitationsCreated = 0;
   let mailLogsCreated = 0;
-  let skippedNotReadyCount = 0;
+  const skippedNotReadyCount = 0;
+  let skippedNoParticipantsCount = 0;
 
   for (const scheduledSend of dueSends) {
     const surveyInstance = scheduledSend.surveyInstance;
 
-    // Event surveys require explicit club readiness before DMU can process send.
-    if (surveyInstance.surveyType === "EVENT" && !surveyInstance.clubReadyAt) {
-      skippedNotReadyCount += 1;
-      continue;
-    }
-
-    const [members, extraEmails] = await Promise.all([
-      prisma.member.findMany({
-        where: {
-          clubId: surveyInstance.clubId,
-          active: true,
-        },
-        select: {
-          id: true,
-          email: true,
-        },
-      }),
-      prisma.clubExtraEmail.findMany({
-        where: {
-          clubId: surveyInstance.clubId,
-          active: true,
-        },
-        select: {
-          email: true,
-        },
-      }),
-    ]);
-
-    const existingInvitationMemberIds = new Set(
-      surveyInstance.invitations.map((invitation) => invitation.memberId).filter((id): id is string => Boolean(id))
-    );
     const existingInvitationEmails = new Set(
       surveyInstance.invitations.map((invitation) => invitation.emailSnapshot.trim().toLowerCase())
     );
 
-    for (const member of members) {
-      if (existingInvitationMemberIds.has(member.id)) {
+    if (surveyInstance.surveyType === "EVENT") {
+      if (!surveyInstance.eventId) {
+        skippedNoParticipantsCount += 1;
         continue;
       }
 
-      const normalizedEmail = member.email.trim().toLowerCase();
-      if (existingInvitationEmails.has(normalizedEmail)) {
+      const participants = await prisma.eventParticipant.findMany({
+        where: { eventId: surveyInstance.eventId },
+        select: { id: true, email: true },
+      });
+
+      // A due event survey stays pending until its event-specific participant list is ready.
+      if (participants.length === 0) {
+        skippedNoParticipantsCount += 1;
         continue;
       }
 
-      const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+      const existingInvitationParticipantIds = new Set(
+        surveyInstance.invitations
+          .map((invitation) => invitation.eventParticipantId)
+          .filter((id): id is string => Boolean(id))
+      );
 
-      const invitation = await prisma.surveyInvitation.create({
-        data: {
-          surveyInstanceId: surveyInstance.id,
-          memberId: member.id,
-          emailSnapshot: member.email,
-          token,
-          status: "SENT",
-          sentAt: now,
-        },
-      });
+      for (const participant of participants) {
+        if (existingInvitationParticipantIds.has(participant.id)) {
+          continue;
+        }
 
-      const emailResult = await sendSurveyInvitation({
-        toEmail: member.email,
-        surveyName: surveyInstance.name,
-        token,
-      });
+        const normalizedEmail = participant.email.trim().toLowerCase();
+        if (existingInvitationEmails.has(normalizedEmail)) {
+          continue;
+        }
 
-      await prisma.mailLog.create({
-        data: {
-          surveyInvitationId: invitation.id,
-          toEmail: member.email,
-          subject: `Din mening om ${surveyInstance.name}`,
-          bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
-          sentAt: now,
-          status: emailResult.success ? "SENT" : "FAILED",
-        },
-      });
+        const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+        const invitation = await prisma.surveyInvitation.create({
+          data: {
+            surveyInstanceId: surveyInstance.id,
+            eventParticipantId: participant.id,
+            emailSnapshot: normalizedEmail,
+            token,
+            status: "SENT",
+            sentAt: now,
+          },
+        });
 
-      invitationsCreated += 1;
-      mailLogsCreated += 1;
-      existingInvitationMemberIds.add(member.id);
-      existingInvitationEmails.add(normalizedEmail);
-    }
-
-    for (const extraEmail of extraEmails) {
-      const normalizedEmail = extraEmail.email.trim().toLowerCase();
-      if (existingInvitationEmails.has(normalizedEmail)) {
-        continue;
-      }
-
-      const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
-
-      const invitation = await prisma.surveyInvitation.create({
-        data: {
-          surveyInstanceId: surveyInstance.id,
-          memberId: null,
-          emailSnapshot: normalizedEmail,
-          token,
-          status: "SENT",
-          sentAt: now,
-        },
-      });
-
-      const extraEmailResult = await sendSurveyInvitation({
-        toEmail: normalizedEmail,
-        surveyName: surveyInstance.name,
-        token,
-      });
-
-      await prisma.mailLog.create({
-        data: {
-          surveyInvitationId: invitation.id,
+        const emailResult = await sendSurveyInvitation({
           toEmail: normalizedEmail,
-          subject: `Din mening om ${surveyInstance.name}`,
-          bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
-          sentAt: now,
-          status: extraEmailResult.success ? "SENT" : "FAILED",
-        },
-      });
+          surveyName: surveyInstance.name,
+          token,
+        });
 
-      invitationsCreated += 1;
-      mailLogsCreated += 1;
-      existingInvitationEmails.add(normalizedEmail);
+        await prisma.mailLog.create({
+          data: {
+            surveyInvitationId: invitation.id,
+            toEmail: normalizedEmail,
+            subject: `Din mening om ${surveyInstance.name}`,
+            bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
+            sentAt: now,
+            status: emailResult.success ? "SENT" : "FAILED",
+          },
+        });
+
+        invitationsCreated += 1;
+        mailLogsCreated += 1;
+        existingInvitationParticipantIds.add(participant.id);
+        existingInvitationEmails.add(normalizedEmail);
+      }
+    } else {
+      const [members, extraEmails] = await Promise.all([
+        prisma.member.findMany({
+          where: { clubId: surveyInstance.clubId, active: true },
+          select: { id: true, email: true },
+        }),
+        prisma.clubExtraEmail.findMany({
+          where: { clubId: surveyInstance.clubId, active: true },
+          select: { email: true },
+        }),
+      ]);
+
+      const existingInvitationMemberIds = new Set(
+        surveyInstance.invitations.map((invitation) => invitation.memberId).filter((id): id is string => Boolean(id))
+      );
+
+      for (const member of members) {
+        if (existingInvitationMemberIds.has(member.id)) {
+          continue;
+        }
+
+        const normalizedEmail = member.email.trim().toLowerCase();
+        if (existingInvitationEmails.has(normalizedEmail)) {
+          continue;
+        }
+
+        const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+        const invitation = await prisma.surveyInvitation.create({
+          data: {
+            surveyInstanceId: surveyInstance.id,
+            memberId: member.id,
+            emailSnapshot: member.email,
+            token,
+            status: "SENT",
+            sentAt: now,
+          },
+        });
+
+        const emailResult = await sendSurveyInvitation({
+          toEmail: member.email,
+          surveyName: surveyInstance.name,
+          token,
+        });
+
+        await prisma.mailLog.create({
+          data: {
+            surveyInvitationId: invitation.id,
+            toEmail: member.email,
+            subject: `Din mening om ${surveyInstance.name}`,
+            bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
+            sentAt: now,
+            status: emailResult.success ? "SENT" : "FAILED",
+          },
+        });
+
+        invitationsCreated += 1;
+        mailLogsCreated += 1;
+        existingInvitationMemberIds.add(member.id);
+        existingInvitationEmails.add(normalizedEmail);
+      }
+
+      for (const extraEmail of extraEmails) {
+        const normalizedEmail = extraEmail.email.trim().toLowerCase();
+        if (existingInvitationEmails.has(normalizedEmail)) {
+          continue;
+        }
+
+        const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+        const invitation = await prisma.surveyInvitation.create({
+          data: {
+            surveyInstanceId: surveyInstance.id,
+            emailSnapshot: normalizedEmail,
+            token,
+            status: "SENT",
+            sentAt: now,
+          },
+        });
+
+        const emailResult = await sendSurveyInvitation({
+          toEmail: normalizedEmail,
+          surveyName: surveyInstance.name,
+          token,
+        });
+
+        await prisma.mailLog.create({
+          data: {
+            surveyInvitationId: invitation.id,
+            toEmail: normalizedEmail,
+            subject: `Din mening om ${surveyInstance.name}`,
+            bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
+            sentAt: now,
+            status: emailResult.success ? "SENT" : "FAILED",
+          },
+        });
+
+        invitationsCreated += 1;
+        mailLogsCreated += 1;
+        existingInvitationEmails.add(normalizedEmail);
+      }
     }
 
     await prisma.surveyInstance.update({
@@ -175,5 +226,6 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
     invitationsCreated,
     mailLogsCreated,
     skippedNotReadyCount,
+    skippedNoParticipantsCount,
   };
 }

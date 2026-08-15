@@ -30,7 +30,7 @@ export async function requireRole(role: SessionPayload["role"]) {
 
 export function getHomePathForRole(role: SessionPayload["role"]) {
   if (role === "DMU_ADMIN") {
-    return "/dmu/overview";
+    return "/dmu/dashboard";
   }
   return "/club/overview";
 }

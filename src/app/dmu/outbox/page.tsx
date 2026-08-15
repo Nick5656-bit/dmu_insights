@@ -153,8 +153,8 @@ export default async function DmuOutboxPage({ searchParams }: DmuOutboxPageProps
 
     await processDueScheduledSends(selectedScheduledSendIds);
 
-    revalidatePath("/dmu/outbox");
-    revalidatePath("/dmu/events");
+    revalidatePath("/dmu/settings/sends");
+    revalidatePath("/dmu/calendar");
     revalidatePath("/club/outbox");
     revalidatePath("/club/events");
   }
@@ -268,7 +268,7 @@ export default async function DmuOutboxPage({ searchParams }: DmuOutboxPageProps
               Vis udsendelser
             </button>
             {(shouldShowDetails || hasActiveFilters) && (
-              <Link href="/dmu/outbox" className="flex h-10 items-center justify-center rounded-md border px-4 text-sm text-muted-foreground hover:bg-muted">
+              <Link href="/dmu/settings/sends" className="flex h-10 items-center justify-center rounded-md border px-4 text-sm text-muted-foreground hover:bg-muted">
                 Nulstil
               </Link>
             )}
@@ -323,7 +323,7 @@ export default async function DmuOutboxPage({ searchParams }: DmuOutboxPageProps
                       <p className="text-lg font-semibold text-green-600">{instance.answeredCount}</p>
                     </div>
                     <Link
-                      href={`/dmu/outbox/${instance.id}`}
+                      href={`/dmu/settings/sends/${instance.id}`}
                       className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted whitespace-nowrap"
                     >
                       Se mails →
