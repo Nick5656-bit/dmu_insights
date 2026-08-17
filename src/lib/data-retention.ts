@@ -66,6 +66,8 @@ export async function processDataRetention() {
           emailSnapshot: REDACTED_EMAIL_SNAPSHOT,
           memberId: null,
           eventParticipantId: null,
+          tokenCiphertext: null,
+          lastDeliveryError: null,
         },
       }),
       prisma.eventParticipant.deleteMany({

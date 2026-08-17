@@ -26,11 +26,15 @@ export type SendSurveyInvitationParams = {
   token: string;
 };
 
+export type SendSurveyInvitationResult =
+  | { success: true }
+  | { success: false; error: string; retryable: boolean };
+
 export async function sendSurveyInvitation({
   toEmail,
   surveyName,
   token,
-}: SendSurveyInvitationParams): Promise<{ success: boolean; error?: string }> {
+}: SendSurveyInvitationParams): Promise<SendSurveyInvitationResult> {
   const surveyUrl = `${getAppUrl()}/survey/${token}`;
   const privacyUrl = `${getAppUrl()}/privacy`;
   const safeSurveyName = escapeHtml(surveyName.replace(/[\r\n]+/g, " ").trim());
@@ -159,15 +163,23 @@ Danmarks Motor Union
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error(`[email] Brevo fejl (${response.status}):`, errorBody);
-      return { success: false, error: `HTTP ${response.status}: ${errorBody}` };
+      // Do not retain Brevo's response body: it can contain personal information.
+      console.error(`[email] Brevo fejl (HTTP ${response.status})`);
+      return {
+        success: false,
+        error: `HTTP ${response.status}`,
+        retryable: response.status === 429 || response.status >= 500,
+      };
     }
 
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Ukendt fejl";
-    console.error(`[email] Uventet fejl ved afsendelse til ${toEmail}:`, message);
-    return { success: false, error: message };
+    console.error("[email] Uventet fejl ved afsendelse:", message);
+    return {
+      success: false,
+      error: message,
+      retryable: !message.includes("BREVO_API_KEY") && !message.includes("SMTP_FROM"),
+    };
   }
 }

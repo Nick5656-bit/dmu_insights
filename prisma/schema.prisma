@@ -81,6 +81,13 @@ enum InvitationStatus {
   ANSWERED
 }
 
+enum InvitationDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
 enum MailStatus {
   SENT
   FAILED
@@ -284,8 +291,11 @@ model ScheduledSend {
   status           ScheduledSendStatus      @default(PENDING)
   triggerType      ScheduledSendTriggerType
   processedAt      DateTime?
+  processingStartedAt DateTime?
 
   surveyInstance SurveyInstance @relation(fields: [surveyInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([status, sendAt])
 }
 
 model SurveyInvitation {
@@ -295,7 +305,13 @@ model SurveyInvitation {
   eventParticipantId String?
   emailSnapshot    String
   token            String           @unique
+  tokenCiphertext  String?
   status           InvitationStatus @default(CREATED)
+  deliveryStatus   InvitationDeliveryStatus @default(PENDING)
+  deliveryAttempts Int              @default(0)
+  lastDeliveryAttemptAt DateTime?
+  nextDeliveryAttemptAt DateTime?
+  lastDeliveryError String?
   sentAt           DateTime?
   openedAt         DateTime?
   answeredAt       DateTime?
@@ -306,6 +322,8 @@ model SurveyInvitation {
   member         Member?        @relation(fields: [memberId], references: [id], onDelete: SetNull)
   eventParticipant EventParticipant? @relation(fields: [eventParticipantId], references: [id], onDelete: SetNull)
   mailLogs       MailLog[]
+
+  @@index([deliveryStatus, nextDeliveryAttemptAt])
 }
 
 model SurveyResponse {
