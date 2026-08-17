@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { DmuLogo } from "@/components/dmu-logo";
 import { prisma } from "@/lib/prisma";
 import { hashSurveyToken } from "@/lib/survey-token";
@@ -303,7 +304,10 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
       <section className="w-full rounded-xl border bg-background p-6">
         <DmuLogo compact />
         <h1 className="text-2xl font-semibold">Medlemsspørgeskema</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Svar anonymt. Det tager ca. 2-3 minutter.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Dine svar behandles fortroligt og vises kun samlet. Det tager ca. 2-3 minutter.</p>
+        <Link href="/privacy" className="mt-2 inline-flex text-sm font-medium text-primary underline">
+          Sådan behandler DMU dine oplysninger
+        </Link>
 
         <form action={submitSurveyAction} className="mt-6 space-y-5">
           {(() => {

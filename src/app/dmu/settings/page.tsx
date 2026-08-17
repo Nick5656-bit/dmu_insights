@@ -17,7 +17,7 @@ export default async function DmuSettingsPage() {
         <p className="mt-2 text-sm text-muted-foreground">Administrér klubadgange og se historikken for udsendelser.</p>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-3">
         <Link href="/dmu/settings/club-users" className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:bg-muted/20">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Klubbrugere</p>
           <h2 className="mt-3 text-2xl font-semibold">Adgang for klubber</h2>
@@ -29,6 +29,12 @@ export default async function DmuSettingsPage() {
           <h2 className="mt-3 text-2xl font-semibold">Historik og mails</h2>
           <p className="mt-2 text-sm text-muted-foreground">Følg planlagte og afsluttede udsendelser, samt deres mailhistorik.</p>
           <p className="mt-6 text-sm font-semibold text-primary">{sentSurveys} sendte spørgeskemaer →</p>
+        </Link>
+        <Link href="/dmu/settings/privacy" className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:bg-muted/20">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Databeskyttelse</p>
+          <h2 className="mt-3 text-2xl font-semibold">Privatliv og sletning</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Se frister, den offentlige privatlivstekst og næste automatiske oprydning.</p>
+          <p className="mt-6 text-sm font-semibold text-primary">Åbn datalivscyklus →</p>
         </Link>
       </section>
     </div>

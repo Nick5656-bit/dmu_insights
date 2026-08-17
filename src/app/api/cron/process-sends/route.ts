@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { processDataRetention } from "@/lib/data-retention";
 import { processDueScheduledSends } from "@/lib/scheduled-sends";
 
 export const maxDuration = 300;
@@ -12,8 +13,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await processDueScheduledSends();
-    return NextResponse.json({ ok: true, ...result });
+    const sendResult = await processDueScheduledSends();
+    const retentionResult = await processDataRetention();
+    return NextResponse.json({ ok: true, sends: sendResult, retention: retentionResult });
   } catch (error) {
     console.error("[cron] Could not process scheduled sends", error);
     return NextResponse.json({ error: "Could not process scheduled sends" }, { status: 500 });

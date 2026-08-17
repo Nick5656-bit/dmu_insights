@@ -11,6 +11,15 @@ const getAppUrl = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:300
 const getFromAddress = () =>
   process.env.SMTP_FROM ?? "DMU Feedback <noreply@dmu.dk>";
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;",
+  })[character] ?? character);
+
 export type SendSurveyInvitationParams = {
   toEmail: string;
   surveyName: string;
@@ -23,6 +32,10 @@ export async function sendSurveyInvitation({
   token,
 }: SendSurveyInvitationParams): Promise<{ success: boolean; error?: string }> {
   const surveyUrl = `${getAppUrl()}/survey/${token}`;
+  const privacyUrl = `${getAppUrl()}/privacy`;
+  const safeSurveyName = escapeHtml(surveyName.replace(/[\r\n]+/g, " ").trim());
+  const safeSurveyUrl = escapeHtml(surveyUrl);
+  const safePrivacyUrl = escapeHtml(privacyUrl);
   const fromRaw = getFromAddress();
 
   // Parse "Navn <email@domane.dk>" format
@@ -36,7 +49,7 @@ export async function sendSurveyInvitation({
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Din mening om ${surveyName}</title>
+  <title>Din mening om ${safeSurveyName}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 0;">
@@ -56,7 +69,7 @@ export async function sendSurveyInvitation({
           <tr>
             <td style="background:#ffffff;padding:40px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7;">
               <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">
-                Du har deltaget i <strong>${surveyName}</strong>, og vi håber du havde en god oplevelse.
+                Du har deltaget i <strong>${safeSurveyName}</strong>, og vi håber du havde en god oplevelse.
               </p>
               <p style="margin:0 0 24px;color:#3f3f46;font-size:15px;line-height:1.6;">
                 Vi vil meget gerne høre din feedback – det hjælper os med at gøre motorsport i Danmark endnu bedre for alle. Det tager kun <strong>2-3 minutter</strong>.
@@ -66,7 +79,7 @@ export async function sendSurveyInvitation({
               <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
                 <tr>
                   <td style="background:#10244D;border-radius:10px;">
-                    <a href="${surveyUrl}" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:10px;">
+                    <a href="${safeSurveyUrl}" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:10px;">
                       Besvar undersøgelsen →
                     </a>
                   </td>
@@ -78,7 +91,7 @@ export async function sendSurveyInvitation({
                 <tr>
                   <td style="background:#f4f4f5;border-radius:10px;padding:16px 20px;">
                     <p style="margin:0;color:#71717a;font-size:13px;line-height:1.6;">
-                      🔒 <strong>Dine svar er 100% anonyme.</strong> Vi kan ikke se hvem der har svaret hvad – heller ikke DMU. Linket er personligt og kan kun bruges én gang.
+                      🔒 <strong>Dine svar behandles fortroligt.</strong> Invitationsoplysninger og svar behandles adskilt, og resultater vises kun samlet. Linket er personligt og kan kun bruges én gang.
                     </p>
                   </td>
                 </tr>
@@ -86,7 +99,10 @@ export async function sendSurveyInvitation({
 
               <p style="margin:24px 0 0;color:#a1a1aa;font-size:13px;">
                 Kan du ikke klikke på knappen? Kopiér dette link ind i din browser:<br/>
-                <span style="color:#10244D;word-break:break-all;">${surveyUrl}</span>
+                <span style="color:#10244D;word-break:break-all;">${safeSurveyUrl}</span>
+              </p>
+              <p style="margin:16px 0 0;color:#71717a;font-size:13px;line-height:1.6;">
+                Læs om behandling af dine oplysninger: <a href="${safePrivacyUrl}" style="color:#10244D;">${safePrivacyUrl}</a>
               </p>
             </td>
           </tr>
@@ -111,12 +127,15 @@ export async function sendSurveyInvitation({
   const text = `
 Hej,
 
-Du har deltaget i ${surveyName}, og vi vil gerne høre din mening.
+Du har deltaget i ${surveyName.replace(/[\r\n]+/g, " ").trim()}, og vi vil gerne høre din mening.
 
 Besvar undersøgelsen her (tager 2-3 minutter):
 ${surveyUrl}
 
-Dine svar er 100% anonyme. Linket kan kun bruges én gang.
+Dine svar behandles fortroligt, og resultater vises kun samlet. Linket kan kun bruges én gang.
+
+Læs om behandling af dine oplysninger:
+${privacyUrl}
 
 Med venlig hilsen
 Danmarks Motor Union

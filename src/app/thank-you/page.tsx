@@ -1,4 +1,5 @@
 import { DmuLogo } from "@/components/dmu-logo";
+import Link from "next/link";
 
 export default function ThankYouPage() {
   return (
@@ -9,8 +10,11 @@ export default function ThankYouPage() {
         </div>
         <h1 className="text-2xl font-semibold">Tak for dit svar</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Din besvarelse er modtaget anonymt.
+          Din besvarelse er modtaget. Tak fordi du tog dig tid.
         </p>
+        <Link href="/privacy" className="mt-4 inline-flex text-sm font-medium text-primary underline">
+          Læs om behandling af dine oplysninger
+        </Link>
       </section>
     </div>
   );
