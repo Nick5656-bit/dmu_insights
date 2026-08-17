@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { processDataRetention } from "@/lib/data-retention";
+import { prisma } from "@/lib/prisma";
 import { processDueScheduledSends } from "@/lib/scheduled-sends";
 
 export const maxDuration = 300;
@@ -12,12 +13,47 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let jobRunId: string | undefined;
+
   try {
+    const jobRun = await prisma.systemJobRun.create({
+      data: { jobName: "daily-maintenance" },
+      select: { id: true },
+    });
+    jobRunId = jobRun.id;
+
     const sendResult = await processDueScheduledSends();
     const retentionResult = await processDataRetention();
-    return NextResponse.json({ ok: true, sends: sendResult, retention: retentionResult });
+    const result = { sends: sendResult, retention: retentionResult };
+
+    await prisma.systemJobRun.update({
+      where: { id: jobRun.id },
+      data: {
+        status: "SUCCEEDED",
+        finishedAt: new Date(),
+        summary: result,
+      },
+    });
+
+    return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     console.error("[cron] Could not process scheduled sends", error);
+
+    if (jobRunId) {
+      try {
+        await prisma.systemJobRun.update({
+          where: { id: jobRunId },
+          data: {
+            status: "FAILED",
+            finishedAt: new Date(),
+            errorMessage: "Systemkørslen fejlede. Se Vercel-loggene for tekniske detaljer.",
+          },
+        });
+      } catch (jobRunError) {
+        console.error("[cron] Could not record failed job run", jobRunError);
+      }
+    }
+
     return NextResponse.json({ error: "Could not process scheduled sends" }, { status: 500 });
   }
 }

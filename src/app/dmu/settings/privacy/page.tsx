@@ -15,15 +15,27 @@ function subtractYears(date: Date, years: number) {
   return result;
 }
 
+function formatDateTime(date: Date) {
+  return new Intl.DateTimeFormat("da-DK", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
 export default async function DmuPrivacySettingsPage() {
   await requireRole("DMU_ADMIN");
   const now = new Date();
-  const [redactionDue, responseDeletionDue] = await Promise.all([
+  const [redactionDue, responseDeletionDue, lastJobRun] = await Promise.all([
     prisma.surveyInstance.count({
       where: { status: "CLOSED", closesAt: { not: null, lte: subtractDays(now, PII_RETENTION_DAYS) } },
     }),
     prisma.surveyInstance.count({
       where: { status: "CLOSED", closesAt: { not: null, lte: subtractYears(now, RESPONSE_RETENTION_YEARS) } },
+    }),
+    prisma.systemJobRun.findFirst({
+      where: { jobName: "daily-maintenance" },
+      orderBy: { startedAt: "desc" },
+      select: { status: true, startedAt: true, finishedAt: true },
     }),
   ]);
 
@@ -35,7 +47,7 @@ export default async function DmuPrivacySettingsPage() {
         <p className="mt-2 max-w-3xl text-sm text-white/75">Den daglige systemopgave lukker surveys, fjerner kontaktoplysninger efter {PII_RETENTION_DAYS} dage og sletter anonymiserede svar efter {RESPONSE_RETENTION_YEARS} år.</p>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-3">
         <article className="rounded-[24px] border bg-card p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Klar til oprydning</p>
           <p className="mt-3 text-3xl font-semibold">{redactionDue}</p>
@@ -45,6 +57,15 @@ export default async function DmuPrivacySettingsPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Klar til sletning</p>
           <p className="mt-3 text-3xl font-semibold">{responseDeletionDue}</p>
           <p className="mt-2 text-sm text-muted-foreground">Lukkede surveys, hvor svar slettes ved næste daglige kørsel.</p>
+        </article>
+        <article className="rounded-[24px] border bg-card p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Seneste systemkørsel</p>
+          <p className="mt-3 text-xl font-semibold">
+            {lastJobRun ? (lastJobRun.status === "SUCCEEDED" ? "Gennemført" : lastJobRun.status === "FAILED" ? "Fejlet" : "I gang") : "Ikke kørt endnu"}
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {lastJobRun ? formatDateTime(lastJobRun.finishedAt ?? lastJobRun.startedAt) : "Status vises efter næste planlagte kørsel."}
+          </p>
         </article>
       </section>
 

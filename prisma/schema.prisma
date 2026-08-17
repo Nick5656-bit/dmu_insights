@@ -93,6 +93,12 @@ enum MailStatus {
   FAILED
 }
 
+enum SystemJobRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -362,4 +368,16 @@ model MailLog {
   status             MailStatus
 
   surveyInvitation SurveyInvitation @relation(fields: [surveyInvitationId], references: [id], onDelete: Cascade)
+}
+
+model SystemJobRun {
+  id           String             @id @default(cuid())
+  jobName      String
+  status       SystemJobRunStatus @default(RUNNING)
+  startedAt    DateTime           @default(now())
+  finishedAt   DateTime?
+  summary      Json?
+  errorMessage String?
+
+  @@index([jobName, startedAt])
 }

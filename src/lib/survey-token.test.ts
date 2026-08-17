@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createSurveyToken, decryptSurveyToken, encryptSurveyToken, hashSurveyToken } from "./survey-token";
+
+process.env.SURVEY_TOKEN_ENCRYPTION_KEY = "test-only-token-encryption-key";
+
+test("a survey token survives encrypted storage without exposing its hash", () => {
+  const token = createSurveyToken();
+  const encrypted = encryptSurveyToken(token);
+
+  assert.notEqual(encrypted, token);
+  assert.equal(decryptSurveyToken(encrypted), token);
+  assert.equal(hashSurveyToken(token), hashSurveyToken(token));
+});
+
+test("tampered encrypted survey tokens cannot be decrypted", () => {
+  const parts = encryptSurveyToken(createSurveyToken()).split(".");
+  parts[3] = `${parts[3].startsWith("A") ? "B" : "A"}${parts[3].slice(1)}`;
+
+  assert.throws(() => decryptSurveyToken(parts.join(".")));
+});
