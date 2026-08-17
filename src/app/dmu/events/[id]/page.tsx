@@ -172,6 +172,25 @@ export default async function DmuEventDetailPage({
   }
 
   const status = surveyStatusLabel[survey?.status ?? "SCHEDULED"] ?? "Planlagt";
+
+  async function closeSurveyAction() {
+    "use server";
+    await requireRole("DMU_ADMIN");
+
+    if (!survey || survey.status !== "SENT") {
+      return;
+    }
+
+    await prisma.surveyInstance.update({
+      where: { id: survey.id },
+      data: { status: "CLOSED", closesAt: new Date() },
+    });
+
+    revalidatePath(`/dmu/events/${id}`);
+    revalidatePath("/dmu/calendar");
+    revalidatePath("/dmu/dashboard");
+  }
+
   const feedbackMessage =
     feedback.success === "participants_added"
       ? `Deltagerlisten er opdateret${Number(feedback.skipped ?? 0) > 0 ? `. ${feedback.skipped} ugyldige eller dublerede rækker blev sprunget over.` : "."}`
@@ -193,9 +212,18 @@ export default async function DmuEventDetailPage({
         <Link href="/dmu/calendar" className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">
           ← Tilbage til kalender
         </Link>
-        <span className={`rounded-full px-3 py-1 text-sm font-medium ${status === "Sendt" ? "bg-emerald-100 text-emerald-900" : status === "Lukket" ? "bg-stone-200 text-stone-900" : "bg-sky-100 text-sky-900"}`}>
-          {status}
-        </span>
+        <div className="flex items-center gap-2">
+          {survey?.status === "SENT" ? (
+            <form action={closeSurveyAction}>
+              <button type="submit" className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">
+                Luk spørgeskema nu
+              </button>
+            </form>
+          ) : null}
+          <span className={`rounded-full px-3 py-1 text-sm font-medium ${status === "Sendt" ? "bg-emerald-100 text-emerald-900" : status === "Lukket" ? "bg-stone-200 text-stone-900" : "bg-sky-100 text-sky-900"}`}>
+            {status}
+          </span>
+        </div>
       </div>
 
       <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75">
@@ -203,7 +231,7 @@ export default async function DmuEventDetailPage({
         <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">{event.title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">{event.club.name} · {formatDate(event.eventDate)}</p>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <article className="rounded-xl border border-white/12 bg-white/10 p-4">
             <p className="text-xs text-white/70">Lokation</p>
             <p className="mt-1 font-medium text-white">{event.location}</p>
@@ -219,6 +247,10 @@ export default async function DmuEventDetailPage({
           <article className="rounded-xl border border-white/12 bg-white/10 p-4">
             <p className="text-xs text-white/70">Sendetidspunkt</p>
             <p className="mt-1 font-medium text-white">{formatDateTime(scheduledSend?.sendAt)}</p>
+          </article>
+          <article className="rounded-xl border border-white/12 bg-white/10 p-4">
+            <p className="text-xs text-white/70">Svarfrist</p>
+            <p className="mt-1 font-medium text-white">{formatDateTime(survey?.closesAt)}</p>
           </article>
         </div>
       </section>

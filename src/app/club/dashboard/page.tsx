@@ -41,8 +41,6 @@ const benchmarkCategoryLabels: Record<string, string> = {
 
 const dashboardLinks = [
   { href: "/club/overview", label: "Overblik" },
-  { href: "/club/surveys/latest", label: "Seneste spørgeskema" },
-  { href: "/club/outbox", label: "Udsendelser" },
   { href: "/club/events", label: "Arrangementer" },
 ];
 

@@ -1,15 +1,28 @@
 import { prisma } from "@/lib/prisma";
 import { sendSurveyInvitation } from "@/lib/email";
+import { createSurveyToken, hashSurveyToken } from "@/lib/survey-token";
 
 export async function processDueScheduledSends(selectedScheduledSendIds?: string[]) {
   const now = new Date();
   const selectedIds = selectedScheduledSendIds?.filter(Boolean) ?? [];
+
+  const closedCount = await prisma.surveyInstance.updateMany({
+    where: {
+      status: "SENT",
+      closesAt: { lte: now },
+    },
+    data: { status: "CLOSED" },
+  });
 
   const dueSends = await prisma.scheduledSend.findMany({
     where: {
       status: "PENDING",
       sendAt: { lte: now },
       ...(selectedIds.length > 0 ? { id: { in: selectedIds } } : {}),
+      surveyInstance: {
+        status: "SCHEDULED",
+        OR: [{ closesAt: null }, { closesAt: { gt: now } }],
+      },
     },
     include: {
       surveyInstance: {
@@ -67,13 +80,13 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
           continue;
         }
 
-        const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+        const token = createSurveyToken();
         const invitation = await prisma.surveyInvitation.create({
           data: {
             surveyInstanceId: surveyInstance.id,
             eventParticipantId: participant.id,
             emailSnapshot: normalizedEmail,
-            token,
+            token: hashSurveyToken(token),
             status: "SENT",
             sentAt: now,
           },
@@ -90,7 +103,7 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
             surveyInvitationId: invitation.id,
             toEmail: normalizedEmail,
             subject: `Din mening om ${surveyInstance.name}`,
-            bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
+            bodyPreview: "Personligt besvarelseslink sendt. Linket gemmes ikke i mailhistorikken.",
             sentAt: now,
             status: emailResult.success ? "SENT" : "FAILED",
           },
@@ -127,13 +140,13 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
           continue;
         }
 
-        const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+        const token = createSurveyToken();
         const invitation = await prisma.surveyInvitation.create({
           data: {
             surveyInstanceId: surveyInstance.id,
             memberId: member.id,
             emailSnapshot: member.email,
-            token,
+            token: hashSurveyToken(token),
             status: "SENT",
             sentAt: now,
           },
@@ -150,7 +163,7 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
             surveyInvitationId: invitation.id,
             toEmail: member.email,
             subject: `Din mening om ${surveyInstance.name}`,
-            bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
+            bodyPreview: "Personligt besvarelseslink sendt. Linket gemmes ikke i mailhistorikken.",
             sentAt: now,
             status: emailResult.success ? "SENT" : "FAILED",
           },
@@ -168,12 +181,12 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
           continue;
         }
 
-        const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+        const token = createSurveyToken();
         const invitation = await prisma.surveyInvitation.create({
           data: {
             surveyInstanceId: surveyInstance.id,
             emailSnapshot: normalizedEmail,
-            token,
+            token: hashSurveyToken(token),
             status: "SENT",
             sentAt: now,
           },
@@ -190,7 +203,7 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
             surveyInvitationId: invitation.id,
             toEmail: normalizedEmail,
             subject: `Din mening om ${surveyInstance.name}`,
-            bodyPreview: `Besvar anonymt via link: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}/survey/${token}`,
+            bodyPreview: "Personligt besvarelseslink sendt. Linket gemmes ikke i mailhistorikken.",
             sentAt: now,
             status: emailResult.success ? "SENT" : "FAILED",
           },
@@ -222,6 +235,7 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
   }
 
   return {
+    closedCount: closedCount.count,
     processedCount,
     invitationsCreated,
     mailLogsCreated,

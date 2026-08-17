@@ -215,7 +215,7 @@ export default async function ClubOutboxPage({ searchParams }: ClubOutboxPagePro
                 <th className="py-2 pr-4">Til</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Svarstatus</th>
-                <th className="py-2">Link</th>
+                <th className="py-2">Besvarelseslink</th>
               </tr>
             </thead>
             <tbody>
@@ -226,11 +226,7 @@ export default async function ClubOutboxPage({ searchParams }: ClubOutboxPagePro
                   <td className="py-2 pr-4">{mailLog.toEmail}</td>
                   <td className="py-2 pr-4">{mailLog.status === "SENT" ? "Sendt" : mailLog.status}</td>
                   <td className="py-2 pr-4">{invitationStatusLabel[mailLog.surveyInvitation.status] ?? mailLog.surveyInvitation.status}</td>
-                  <td className="py-2">
-                    <Link href={`/survey/${mailLog.surveyInvitation.token}`} className="text-primary underline">
-                      Åbn spørgeskema-link
-                    </Link>
-                  </td>
+                  <td className="py-2 text-xs text-muted-foreground">Personligt link er skjult</td>
                 </tr>
               ))}
             </tbody>

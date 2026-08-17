@@ -138,8 +138,8 @@ export default async function ClubOverviewPage() {
             <p className="mt-3 max-w-2xl text-sm text-primary-foreground/75">Klubbens status og seneste aktivitet.</p>
 
             <div className="mt-5 flex flex-wrap gap-3">
-              <Link href="/club/surveys" className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-primary transition hover:bg-white/92">
-                Spørgeskemaer
+              <Link href="/club/events" className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-primary transition hover:bg-white/92">
+                Arrangementer
               </Link>
               <Link href="/club/dashboard" className="rounded-full border border-white/16 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/8">
                 Indsigter
@@ -193,8 +193,8 @@ export default async function ClubOverviewPage() {
                   <p className="mt-1 text-xs text-amber-800">Event: {eventDate}</p>
                   <p className="text-xs text-amber-800">Send: {sendDate}</p>
                   <div className="mt-3">
-                    <Link href={`/club/surveys/${survey.id}`} className="rounded-full border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
-                      Åbn
+                    <Link href="/club/events" className="rounded-full border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                      Se arrangementer
                     </Link>
                   </div>
                 </article>
@@ -211,8 +211,8 @@ export default async function ClubOverviewPage() {
             <h3 className="mt-2 text-2xl font-bold">Senest afsendte spørgeskemaer</h3>
             <p className="mt-1 text-sm text-muted-foreground">Klubbens seneste udsendelser.</p>
           </div>
-          <Link href="/club/surveys" className="rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-95">
-            Åbn spørgeskemaer
+          <Link href="/club/events" className="rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-95">
+            Se arrangementer
           </Link>
         </div>
 

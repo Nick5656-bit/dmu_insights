@@ -74,15 +74,6 @@ export default async function ClubEventsPage() {
         linkedSurvey ? surveyStatusLabel[linkedSurvey.status] ?? linkedSurvey.status : "Ingen survey",
         linkedSurvey?.clubReadyAt ? "Klar til udsendelse" : "Afventer klarmelding",
       ],
-      actions: linkedSurvey
-        ? [
-            {
-              label: linkedSurvey.status === "SENT" || linkedSurvey.status === "CLOSED" ? "Se spørgeskema" : "Tilpas spørgeskema",
-              href: `/club/surveys/${linkedSurvey.id}`,
-              variant: "primary" as const,
-            },
-          ]
-        : undefined,
       details: [
         {
           label: "Dato",

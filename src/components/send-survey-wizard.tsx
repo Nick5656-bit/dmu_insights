@@ -22,6 +22,7 @@ type EventDraft = {
   location: string;
   eventType: string;
   sendAt: string;
+  closesAt: string;
 };
 
 type SendSurveyWizardProps = {
@@ -38,6 +39,7 @@ const createDraft = (): EventDraft => ({
   location: "",
   eventType: "",
   sendAt: "",
+  closesAt: "",
 });
 
 const steps = ["Vælg skabelon", "Opret arrangementer", "Sæt sendetidspunkt", "Bekræft"];
@@ -47,13 +49,14 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
   const [templateId, setTemplateId] = useState("");
   const [events, setEvents] = useState<EventDraft[]>([createDraft()]);
   const [sharedSendAt, setSharedSendAt] = useState("");
+  const [sharedClosesAt, setSharedClosesAt] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const selectedTemplate = templates.find((template) => template.id === templateId);
   const completeEventDetails = events.every(
     (event) => event.clubId && event.title.trim() && event.eventDate && event.location.trim() && event.eventType.trim(),
   );
-  const completeSendTimes = events.every((event) => event.sendAt);
+  const completeSendTimes = events.every((event) => event.sendAt && event.closesAt);
 
   const payload = useMemo(() => {
     if (!templateId || !completeEventDetails || !completeSendTimes) {
@@ -70,6 +73,7 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
         eventType: event.eventType.trim(),
         // datetime-local is entered in the administrator's local timezone.
         sendAt: new Date(event.sendAt).toISOString(),
+        closesAt: new Date(event.closesAt).toISOString(),
       })),
     });
   }, [completeEventDetails, completeSendTimes, events, templateId]);
@@ -88,7 +92,7 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
       return;
     }
     if (step === 3 && !completeSendTimes) {
-      setError("Angiv et sendetidspunkt for alle arrangementer.");
+      setError("Angiv både sendetidspunkt og lukketidspunkt for alle arrangementer.");
       return;
     }
 
@@ -102,6 +106,15 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
       return;
     }
     setEvents((current) => current.map((event) => ({ ...event, sendAt: sharedSendAt })));
+    setError(null);
+  }
+
+  function applySharedCloseTime() {
+    if (!sharedClosesAt) {
+      setError("Vælg først et fælles lukketidspunkt.");
+      return;
+    }
+    setEvents((current) => current.map((event) => ({ ...event, closesAt: sharedClosesAt })));
     setError(null);
   }
 
@@ -182,7 +195,7 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
       {step === 3 ? (
         <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <h2 className="text-xl font-semibold">Sæt sendetidspunkt</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Vælg samme tidspunkt til alle, eller tilpas hvert arrangement enkeltvis.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Vælg, hvornår invitationen sendes og hvornår spørgeskemaet lukker.</p>
 
           <div className="mt-5 flex flex-wrap items-end gap-3 rounded-2xl border bg-muted/15 p-4">
             <label className="min-w-[260px] flex-1 text-sm font-medium">
@@ -194,9 +207,19 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
             </button>
           </div>
 
+          <div className="mt-3 flex flex-wrap items-end gap-3 rounded-2xl border bg-muted/15 p-4">
+            <label className="min-w-[260px] flex-1 text-sm font-medium">
+              Fælles lukketidspunkt
+              <input className="mt-1" type="datetime-local" value={sharedClosesAt} onChange={(input) => setSharedClosesAt(input.target.value)} />
+            </label>
+            <button type="button" onClick={applySharedCloseTime} className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">
+              Brug for alle
+            </button>
+          </div>
+
           <div className="mt-5 space-y-3">
             {events.map((event, index) => (
-              <div key={event.id} className="grid gap-3 rounded-2xl border bg-background p-4 md:grid-cols-[minmax(0,1fr)_280px] md:items-end">
+              <div key={event.id} className="grid gap-3 rounded-2xl border bg-background p-4 md:grid-cols-[minmax(0,1fr)_220px_220px] md:items-end">
                 <div>
                   <p className="font-medium">{event.title || `Arrangement ${index + 1}`}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{clubs.find((club) => club.id === event.clubId)?.name ?? "Klub ikke valgt"} · {event.eventDate || "Dato ikke valgt"}</p>
@@ -204,6 +227,10 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
                 <label className="text-sm font-medium">
                   Sendes
                   <input className="mt-1" type="datetime-local" value={event.sendAt} onChange={(input) => updateEvent(event.id, "sendAt", input.target.value)} />
+                </label>
+                <label className="text-sm font-medium">
+                  Lukker
+                  <input className="mt-1" type="datetime-local" value={event.closesAt} onChange={(input) => updateEvent(event.id, "closesAt", input.target.value)} />
                 </label>
               </div>
             ))}
@@ -224,11 +251,12 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
             {events.map((event, index) => (
               <article key={event.id} className="rounded-2xl border bg-background p-5">
                 <p className="font-semibold">{index + 1}. {event.title}</p>
-                <div className="mt-3 grid gap-3 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4">
+                <div className="mt-3 grid gap-3 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-5">
                   <p><span className="block text-xs uppercase tracking-wide">Klub</span>{clubs.find((club) => club.id === event.clubId)?.name}</p>
                   <p><span className="block text-xs uppercase tracking-wide">Event</span>{event.eventDate} · {event.eventType}</p>
                   <p><span className="block text-xs uppercase tracking-wide">Lokation</span>{event.location}</p>
                   <p><span className="block text-xs uppercase tracking-wide">Sendes</span>{new Intl.DateTimeFormat("da-DK", { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.sendAt))}</p>
+                  <p><span className="block text-xs uppercase tracking-wide">Lukker</span>{new Intl.DateTimeFormat("da-DK", { dateStyle: "medium", timeStyle: "short" }).format(new Date(event.closesAt))}</p>
                 </div>
               </article>
             ))}

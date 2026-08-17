@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { createSurveyToken, hashSurveyToken } from "@/lib/survey-token";
 
 const createCustomQuestionSchema = z.object({
   title: z.string().trim().min(3),
@@ -247,14 +248,14 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
         continue;
       }
 
-      const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+      const token = createSurveyToken();
 
       const invitation = await prisma.surveyInvitation.create({
         data: {
           surveyInstanceId: currentSurvey.id,
           memberId: member.id,
           emailSnapshot: member.email,
-          token,
+          token: hashSurveyToken(token),
           status: "SENT",
           sentAt: now,
         },
@@ -265,7 +266,7 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
           surveyInvitationId: invitation.id,
           toEmail: normalizedEmail,
           subject: `Survey fra din klub: ${currentSurvey.name}`,
-          bodyPreview: `Besvar anonymt via link: /survey/${token}`,
+          bodyPreview: "Personligt besvarelseslink sendt. Linket gemmes ikke i mailhistorikken.",
           sentAt: now,
           status: "SENT",
         },
@@ -281,14 +282,14 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
         continue;
       }
 
-      const token = `${crypto.randomUUID()}${crypto.randomUUID().replace(/-/g, "")}`;
+      const token = createSurveyToken();
 
       const invitation = await prisma.surveyInvitation.create({
         data: {
           surveyInstanceId: currentSurvey.id,
           memberId: null,
           emailSnapshot: normalizedEmail,
-          token,
+          token: hashSurveyToken(token),
           status: "SENT",
           sentAt: now,
         },
@@ -299,7 +300,7 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
           surveyInvitationId: invitation.id,
           toEmail: normalizedEmail,
           subject: `Survey fra din klub: ${currentSurvey.name}`,
-          bodyPreview: `Besvar anonymt via link: /survey/${token}`,
+          bodyPreview: "Personligt besvarelseslink sendt. Linket gemmes ikke i mailhistorikken.",
           sentAt: now,
           status: "SENT",
         },

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { DmuLogo } from "@/components/dmu-logo";
 import { prisma } from "@/lib/prisma";
+import { hashSurveyToken } from "@/lib/survey-token";
 
 type LayoutItem =
   | {
@@ -52,9 +53,10 @@ const fallbackRespondentProfile = {
 
 export default async function SurveyTokenPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  const tokenHash = hashSurveyToken(token);
 
-  const invitation = await prisma.surveyInvitation.findUnique({
-    where: { token },
+  const invitation = await prisma.surveyInvitation.findFirst({
+    where: { OR: [{ token: tokenHash }, { token }] },
     include: {
       member: true,
       surveyInstance: {
@@ -103,6 +105,22 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
     );
   }
 
+  const surveyIsClosed =
+    invitation.surveyInstance.status !== "SENT" ||
+    Boolean(invitation.surveyInstance.closesAt && invitation.surveyInstance.closesAt <= new Date());
+
+  if (surveyIsClosed) {
+    return (
+      <div className="mx-auto flex min-h-screen w-full max-w-3xl items-center px-4 py-10">
+        <section className="w-full rounded-xl border bg-background p-6">
+          <DmuLogo compact />
+          <h1 className="text-2xl font-semibold">Spørgeskemaet er lukket</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Tak for din interesse. Der modtages ikke længere svar.</p>
+        </section>
+      </div>
+    );
+  }
+
   if (!invitation.openedAt) {
     await prisma.surveyInvitation.update({
       where: { id: invitation.id },
@@ -116,8 +134,8 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
   async function submitSurveyAction(formData: FormData) {
     "use server";
 
-    const currentInvitation = await prisma.surveyInvitation.findUnique({
-      where: { token },
+    const currentInvitation = await prisma.surveyInvitation.findFirst({
+      where: { OR: [{ token: tokenHash }, { token }] },
       include: {
         member: true,
         surveyInstance: {
@@ -137,7 +155,13 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
       },
     });
 
-    if (!currentInvitation || currentInvitation.status === "ANSWERED") {
+    const surveyHasClosed =
+      !currentInvitation ||
+      currentInvitation.status === "ANSWERED" ||
+      currentInvitation.surveyInstance.status !== "SENT" ||
+      Boolean(currentInvitation.surveyInstance.closesAt && currentInvitation.surveyInstance.closesAt <= new Date());
+
+    if (surveyHasClosed || !currentInvitation) {
       return;
     }
 
@@ -180,7 +204,25 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
       return;
     }
 
-    await prisma.$transaction(async (transaction) => {
+    const submitted = await prisma.$transaction(async (transaction) => {
+      const submittedAt = new Date();
+      const claim = await transaction.surveyInvitation.updateMany({
+        where: {
+          id: currentInvitation.id,
+          status: { in: ["SENT", "OPENED"] },
+        },
+        data: {
+          status: "ANSWERED",
+          answeredAt: submittedAt,
+          openedAt: currentInvitation.openedAt ?? submittedAt,
+        },
+      });
+
+      // Only the first request is allowed to claim this one-time link.
+      if (claim.count !== 1) {
+        return false;
+      }
+
       const response = await transaction.surveyResponse.create({
         data: {
           surveyInstanceId: currentInvitation.surveyInstanceId,
@@ -188,7 +230,7 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
           ageGroup: currentInvitation.member?.ageGroup ?? fallbackRespondentProfile.ageGroup,
           raceClass: currentInvitation.member?.raceClass ?? fallbackRespondentProfile.raceClass,
           memberRole: currentInvitation.member?.memberRole ?? fallbackRespondentProfile.memberRole,
-          submittedAt: new Date(),
+          submittedAt,
         },
       });
 
@@ -204,15 +246,12 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
         });
       }
 
-      await transaction.surveyInvitation.update({
-        where: { id: currentInvitation.id },
-        data: {
-          status: "ANSWERED",
-          answeredAt: new Date(),
-          openedAt: currentInvitation.openedAt ?? new Date(),
-        },
-      });
+      return true;
     });
+
+    if (!submitted) {
+      return;
+    }
 
     redirect("/thank-you");
   }

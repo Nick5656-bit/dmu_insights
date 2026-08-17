@@ -12,6 +12,7 @@ const eventInputSchema = z.object({
   location: z.string().trim().min(2).max(160),
   eventType: z.string().trim().min(2).max(80),
   sendAt: z.string().datetime({ offset: true }),
+  closesAt: z.string().datetime({ offset: true }),
 });
 
 const batchSchema = z.object({
@@ -52,6 +53,10 @@ export default async function DmuSendPage() {
       redirect("/dmu/send?error=invalid_payload");
     }
 
+    if (parsed.data.events.some((event) => new Date(event.closesAt) <= new Date(event.sendAt))) {
+      redirect("/dmu/send?error=invalid_close_time");
+    }
+
     const template = await prisma.surveyTemplate.findFirst({
       where: { id: parsed.data.templateId, surveyType: "EVENT", isActive: true },
       include: { templateQuestions: { orderBy: { sortOrder: "asc" } } },
@@ -71,7 +76,8 @@ export default async function DmuSendPage() {
       for (const item of parsed.data.events) {
         const eventDate = new Date(`${item.eventDate}T12:00:00.000Z`);
         const sendAt = new Date(item.sendAt);
-        if (Number.isNaN(eventDate.getTime()) || Number.isNaN(sendAt.getTime())) {
+        const closesAt = new Date(item.closesAt);
+        if (Number.isNaN(eventDate.getTime()) || Number.isNaN(sendAt.getTime()) || Number.isNaN(closesAt.getTime())) {
           throw new Error("Invalid event date or send time");
         }
 
@@ -97,6 +103,7 @@ export default async function DmuSendPage() {
             createdByUserId: session.userId,
             // PILOT: DMU administrerer udsendelsen; klubben skal ikke klarmelde.
             clubReadyAt: new Date(),
+            closesAt,
           },
         });
 
