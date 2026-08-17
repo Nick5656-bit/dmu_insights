@@ -19,3 +19,13 @@ test("tampered encrypted survey tokens cannot be decrypted", () => {
 
   assert.throws(() => decryptSurveyToken(parts.join(".")));
 });
+
+test("links encrypted with the fallback key remain retryable after a dedicated key is added", () => {
+  delete process.env.SURVEY_TOKEN_ENCRYPTION_KEY;
+  process.env.SESSION_SECRET = "test-session-secret";
+  const token = createSurveyToken();
+  const encryptedWithFallback = encryptSurveyToken(token);
+
+  process.env.SURVEY_TOKEN_ENCRYPTION_KEY = "test-dedicated-token-key";
+  assert.equal(decryptSurveyToken(encryptedWithFallback), token);
+});
