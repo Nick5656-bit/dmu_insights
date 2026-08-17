@@ -113,6 +113,14 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
       : []),
   ];
 
+  const exportParams = new URLSearchParams();
+  if (selectedClubIds.length > 0) exportParams.set("clubIds", selectedClubIds.join(","));
+  if (selectedTemplate) exportParams.set("surveyTemplateId", selectedTemplate.id);
+  if (ageGroupFilter) exportParams.set("ageGroup", ageGroupFilter);
+  if (raceClassFilter) exportParams.set("raceClass", raceClassFilter);
+  if (memberRoleFilter) exportParams.set("memberRole", memberRoleFilter);
+  const exportHref = `/api/exports/results${exportParams.size > 0 ? `?${exportParams.toString()}` : ""}`;
+
   const responseWhere = {
     ...(selectedTemplate ? { surveyInstanceId: { in: selectedTemplateInstanceIds } } : {}),
     ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
@@ -331,6 +339,12 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
                 {link.label}
               </Link>
             ))}
+            <a
+              href={exportHref}
+              className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/16"
+            >
+              Eksportér resultater
+            </a>
           </div>
         </div>
 

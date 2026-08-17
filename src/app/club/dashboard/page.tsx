@@ -257,6 +257,12 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
   const scopePills = activeFilters.length > 0 ? activeFilters : ["Hele klubben"];
   const canRenderBenchmark = canShowOwnSegment && canShowBenchmarkSegment && benchmarkRows.length > 0;
+  const exportParams = new URLSearchParams();
+  if (selectedSurveyId) exportParams.set("surveyInstanceId", selectedSurveyId);
+  if (ageGroupFilter) exportParams.set("ageGroup", ageGroupFilter);
+  if (raceClassFilter) exportParams.set("raceClass", raceClassFilter);
+  if (memberRoleFilter) exportParams.set("memberRole", memberRoleFilter);
+  const exportHref = `/api/exports/results${exportParams.size > 0 ? `?${exportParams.toString()}` : ""}`;
 
   return (
     <div className="space-y-6">
@@ -292,6 +298,12 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
                 {link.label}
               </Link>
             ))}
+            <a
+              href={exportHref}
+              className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/16"
+            >
+              Eksportér resultater
+            </a>
           </div>
         </div>
 
