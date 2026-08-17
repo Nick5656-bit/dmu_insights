@@ -88,6 +88,15 @@ enum InvitationDeliveryStatus {
   FAILED
 }
 
+enum ReminderStatus {
+  NOT_SCHEDULED
+  PENDING
+  SENDING
+  SENT
+  SKIPPED
+  FAILED
+}
+
 enum MailStatus {
   SENT
   FAILED
@@ -318,6 +327,13 @@ model SurveyInvitation {
   lastDeliveryAttemptAt DateTime?
   nextDeliveryAttemptAt DateTime?
   lastDeliveryError String?
+  reminderStatus   ReminderStatus @default(NOT_SCHEDULED)
+  reminderScheduledAt DateTime?
+  reminderSentAt   DateTime?
+  reminderAttempts Int            @default(0)
+  reminderLastAttemptAt DateTime?
+  reminderNextAttemptAt DateTime?
+  reminderLastError String?
   sentAt           DateTime?
   openedAt         DateTime?
   answeredAt       DateTime?
@@ -330,6 +346,7 @@ model SurveyInvitation {
   mailLogs       MailLog[]
 
   @@index([deliveryStatus, nextDeliveryAttemptAt])
+  @@index([reminderStatus, reminderNextAttemptAt])
 }
 
 model SurveyResponse {

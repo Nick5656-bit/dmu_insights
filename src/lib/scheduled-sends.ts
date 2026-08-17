@@ -1,4 +1,4 @@
-import { processPendingInvitationDeliveries } from "@/lib/invitation-delivery";
+import { processDueSurveyReminders, processPendingInvitationDeliveries } from "@/lib/invitation-delivery";
 import { prisma } from "@/lib/prisma";
 import { createSurveyToken, encryptSurveyToken, hashSurveyToken } from "@/lib/survey-token";
 
@@ -217,6 +217,7 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
   }
 
   const delivery = await processPendingInvitationDeliveries();
+  const reminders = await processDueSurveyReminders();
 
   return {
     closedCount: closedCount.count,
@@ -225,5 +226,6 @@ export async function processDueScheduledSends(selectedScheduledSendIds?: string
     skippedNoParticipantsCount,
     scheduleFailuresCount,
     delivery,
+    reminders,
   };
 }

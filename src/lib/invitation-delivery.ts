@@ -1,8 +1,15 @@
 import { prisma } from "@/lib/prisma";
-import { sendSurveyInvitation } from "@/lib/email";
+import { sendSurveyInvitation, sendSurveyReminder } from "@/lib/email";
+import {
+  canScheduleReminder,
+  getReminderScheduledAt,
+  REMINDER_CLOSE_BUFFER_HOURS,
+  shouldSkipSurveyReminder,
+} from "@/lib/reminder-policy";
 import { decryptSurveyToken } from "@/lib/survey-token";
 
 const MAX_DELIVERY_ATTEMPTS = 5;
+const MAX_REMINDER_ATTEMPTS = 3;
 const DELIVERY_BATCH_SIZE = 200;
 const DELIVERY_CONCURRENCY = 5;
 const STALE_DELIVERY_MINUTES = 15;
@@ -18,6 +25,16 @@ type DeliveryCounters = {
   permanentlyFailedCount: number;
   skippedClaimedCount: number;
   legacyFailuresMarkedCount: number;
+};
+
+type ReminderCounters = {
+  candidatesCount: number;
+  attemptedCount: number;
+  deliveredCount: number;
+  retryScheduledCount: number;
+  permanentlyFailedCount: number;
+  skippedCount: number;
+  skippedClaimedCount: number;
 };
 
 function subtractMinutes(date: Date, minutes: number) {
@@ -121,7 +138,7 @@ export async function processPendingInvitationDeliveries() {
       emailSnapshot: true,
       tokenCiphertext: true,
       deliveryAttempts: true,
-      surveyInstance: { select: { name: true } },
+      surveyInstance: { select: { name: true, closesAt: true } },
     },
     orderBy: [{ nextDeliveryAttemptAt: "asc" }, { createdAt: "asc" }],
     take: DELIVERY_BATCH_SIZE,
@@ -209,6 +226,9 @@ export async function processPendingInvitationDeliveries() {
     });
 
     if (emailResult.success) {
+      const reminderScheduledAt = getReminderScheduledAt(now);
+      const scheduleReminder = canScheduleReminder(candidate.surveyInstance.closesAt, now);
+
       await prisma.$transaction([
         prisma.surveyInvitation.update({
           where: { id: candidate.id },
@@ -218,6 +238,14 @@ export async function processPendingInvitationDeliveries() {
             sentAt: now,
             nextDeliveryAttemptAt: null,
             lastDeliveryError: null,
+            ...(scheduleReminder
+              ? {
+                  reminderStatus: "PENDING",
+                  reminderScheduledAt,
+                  reminderNextAttemptAt: reminderScheduledAt,
+                  reminderLastError: null,
+                }
+              : {}),
           },
         }),
         prisma.mailLog.create({ data: { ...baseMailLog, status: "SENT" } }),
@@ -241,6 +269,194 @@ export async function processPendingInvitationDeliveries() {
               deliveryStatus: "FAILED",
               nextDeliveryAttemptAt: null,
               lastDeliveryError: failureMessage,
+            },
+      }),
+      prisma.mailLog.create({ data: { ...baseMailLog, status: "FAILED" } }),
+    ]);
+
+    if (shouldRetry) {
+      counters.retryScheduledCount += 1;
+    } else {
+      counters.permanentlyFailedCount += 1;
+    }
+  });
+
+  return counters;
+}
+
+/**
+ * Sends one optional follow-up after a delivered invitation. A reminder is never
+ * sent to an answered survey or during the final 24 hours before survey closure.
+ */
+export async function processDueSurveyReminders() {
+  const now = new Date();
+  const staleBefore = subtractMinutes(now, STALE_DELIVERY_MINUTES);
+  const closeBufferEnd = new Date(now.getTime() + REMINDER_CLOSE_BUFFER_HOURS * 60 * 60 * 1000);
+
+  const candidates = await prisma.surveyInvitation.findMany({
+    where: {
+      deliveryStatus: "SENT",
+      OR: [
+        {
+          reminderStatus: "PENDING",
+          OR: [{ reminderNextAttemptAt: null }, { reminderNextAttemptAt: { lte: now } }],
+        },
+        {
+          reminderStatus: "SENDING",
+          reminderLastAttemptAt: { lte: staleBefore },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      emailSnapshot: true,
+      tokenCiphertext: true,
+      reminderAttempts: true,
+      status: true,
+      surveyInstance: { select: { name: true, status: true, closesAt: true } },
+    },
+    orderBy: [{ reminderNextAttemptAt: "asc" }, { createdAt: "asc" }],
+    take: DELIVERY_BATCH_SIZE,
+  });
+
+  const counters: ReminderCounters = {
+    candidatesCount: candidates.length,
+    attemptedCount: 0,
+    deliveredCount: 0,
+    retryScheduledCount: 0,
+    permanentlyFailedCount: 0,
+    skippedCount: 0,
+    skippedClaimedCount: 0,
+  };
+
+  await processWithConcurrency(candidates, async (candidate) => {
+    const shouldSkip = shouldSkipSurveyReminder({
+      invitationStatus: candidate.status,
+      surveyStatus: candidate.surveyInstance.status,
+      closesAt: candidate.surveyInstance.closesAt,
+      now,
+    });
+
+    if (shouldSkip) {
+      const skipped = await prisma.surveyInvitation.updateMany({
+        where: {
+          id: candidate.id,
+          reminderStatus: { in: ["PENDING", "SENDING"] },
+        },
+        data: {
+          reminderStatus: "SKIPPED",
+          reminderNextAttemptAt: null,
+          reminderLastError: null,
+        },
+      });
+      counters.skippedCount += skipped.count;
+      return;
+    }
+
+    const claim = await prisma.surveyInvitation.updateMany({
+      where: {
+        id: candidate.id,
+        status: { in: ["SENT", "OPENED"] },
+        deliveryStatus: "SENT",
+        OR: [
+          {
+            reminderStatus: "PENDING",
+            OR: [{ reminderNextAttemptAt: null }, { reminderNextAttemptAt: { lte: now } }],
+          },
+          {
+            reminderStatus: "SENDING",
+            reminderLastAttemptAt: { lte: staleBefore },
+          },
+        ],
+        surveyInstance: {
+          status: "SENT",
+          OR: [{ closesAt: null }, { closesAt: { gt: closeBufferEnd } }],
+        },
+      },
+      data: {
+        reminderStatus: "SENDING",
+        reminderAttempts: { increment: 1 },
+        reminderLastAttemptAt: now,
+        reminderNextAttemptAt: null,
+        reminderLastError: null,
+      },
+    });
+
+    if (claim.count === 0) {
+      counters.skippedClaimedCount += 1;
+      return;
+    }
+
+    counters.attemptedCount += 1;
+    const attemptNumber = candidate.reminderAttempts + 1;
+    const baseMailLog = {
+      surveyInvitationId: candidate.id,
+      toEmail: candidate.emailSnapshot,
+      subject: `Paamindelse: Din mening om ${candidate.surveyInstance.name}`,
+      bodyPreview: "En enkelt paamindelse med det personlige besvarelseslink er sendt.",
+      sentAt: now,
+    };
+
+    let token: string;
+    try {
+      if (!candidate.tokenCiphertext) {
+        throw new Error("Krypteret link mangler");
+      }
+      token = decryptSurveyToken(candidate.tokenCiphertext);
+    } catch {
+      await prisma.$transaction([
+        prisma.surveyInvitation.update({
+          where: { id: candidate.id },
+          data: {
+            reminderStatus: "FAILED",
+            reminderNextAttemptAt: null,
+            reminderLastError: "Det krypterede link til paamindelsen kunne ikke laeses.",
+          },
+        }),
+        prisma.mailLog.create({ data: { ...baseMailLog, status: "FAILED" } }),
+      ]);
+      counters.permanentlyFailedCount += 1;
+      return;
+    }
+
+    const emailResult = await sendSurveyReminder({
+      toEmail: candidate.emailSnapshot,
+      surveyName: candidate.surveyInstance.name,
+      token,
+    });
+
+    if (emailResult.success) {
+      await prisma.$transaction([
+        prisma.surveyInvitation.update({
+          where: { id: candidate.id },
+          data: {
+            reminderStatus: "SENT",
+            reminderSentAt: now,
+            reminderNextAttemptAt: null,
+            reminderLastError: null,
+          },
+        }),
+        prisma.mailLog.create({ data: { ...baseMailLog, status: "SENT" } }),
+      ]);
+      counters.deliveredCount += 1;
+      return;
+    }
+
+    const shouldRetry = emailResult.retryable && attemptNumber < MAX_REMINDER_ATTEMPTS;
+    const failureMessage = errorSummary(emailResult.error);
+    await prisma.$transaction([
+      prisma.surveyInvitation.update({
+        where: { id: candidate.id },
+        data: shouldRetry
+          ? {
+              reminderStatus: "PENDING",
+              reminderNextAttemptAt: getRetryAt(now, attemptNumber),
+              reminderLastError: failureMessage,
+            }
+          : {
+              reminderStatus: "FAILED",
+              reminderNextAttemptAt: null,
+              reminderLastError: failureMessage,
             },
       }),
       prisma.mailLog.create({ data: { ...baseMailLog, status: "FAILED" } }),

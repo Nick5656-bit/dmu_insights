@@ -24,6 +24,7 @@ export type SendSurveyInvitationParams = {
   toEmail: string;
   surveyName: string;
   token: string;
+  kind?: "INITIAL" | "REMINDER";
 };
 
 export type SendSurveyInvitationResult =
@@ -34,12 +35,19 @@ export async function sendSurveyInvitation({
   toEmail,
   surveyName,
   token,
+  kind = "INITIAL",
 }: SendSurveyInvitationParams): Promise<SendSurveyInvitationResult> {
   const surveyUrl = `${getAppUrl()}/survey/${token}`;
   const privacyUrl = `${getAppUrl()}/privacy`;
-  const safeSurveyName = escapeHtml(surveyName.replace(/[\r\n]+/g, " ").trim());
+  const cleanSurveyName = surveyName.replace(/[\r\n]+/g, " ").trim();
+  const safeSurveyName = escapeHtml(cleanSurveyName);
   const safeSurveyUrl = escapeHtml(surveyUrl);
   const safePrivacyUrl = escapeHtml(privacyUrl);
+  const isReminder = kind === "REMINDER";
+  const subject = `${isReminder ? "Paamindelse: " : ""}Din mening om ${cleanSurveyName}`;
+  const reminderNotice = isReminder
+    ? '<p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;"><strong>Dette er en venlig paamindelse.</strong> Du modtager hoejst denne ene paamindelse, og du kan se bort fra mailen, hvis du allerede har svaret.</p>'
+    : "";
   const fromRaw = getFromAddress();
 
   // Parse "Navn <email@domane.dk>" format
@@ -72,6 +80,7 @@ export async function sendSurveyInvitation({
           <!-- Body -->
           <tr>
             <td style="background:#ffffff;padding:40px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7;">
+              ${reminderNotice}
               <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">
                 Du har deltaget i <strong>${safeSurveyName}</strong>, og vi håber du havde en god oplevelse.
               </p>
@@ -131,6 +140,8 @@ export async function sendSurveyInvitation({
   const text = `
 Hej,
 
+${isReminder ? "Dette er en venlig paamindelse. Du kan se bort fra mailen, hvis du allerede har svaret.\n" : ""}
+
 Du har deltaget i ${surveyName.replace(/[\r\n]+/g, " ").trim()}, og vi vil gerne høre din mening.
 
 Besvar undersøgelsen her (tager 2-3 minutter):
@@ -156,7 +167,7 @@ Danmarks Motor Union
       body: JSON.stringify({
         sender: { name: senderName, email: senderEmail },
         to: [{ email: toEmail }],
-        subject: `Din mening om ${surveyName}`,
+        subject,
         htmlContent: html,
         textContent: text,
       }),
@@ -182,4 +193,8 @@ Danmarks Motor Union
       retryable: !message.includes("BREVO_API_KEY") && !message.includes("SMTP_FROM"),
     };
   }
+}
+
+export function sendSurveyReminder(params: Omit<SendSurveyInvitationParams, "kind">) {
+  return sendSurveyInvitation({ ...params, kind: "REMINDER" });
 }
