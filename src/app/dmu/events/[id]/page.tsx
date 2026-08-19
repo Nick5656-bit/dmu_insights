@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { processDueScheduledSends } from "@/lib/scheduled-sends";
 
 const participantSchema = z.object({
   email: z.string().trim().email(),
@@ -59,7 +60,7 @@ function parseParticipants(rawText: string) {
     });
   }
 
-  const uniqueParticipants = [...new Map(participants.map((participant) => [participant.email, participant])).values()];
+  const uniqueParticipants = [...new Map(participants.map((p) => [p.email, p])).values()];
   return { participants: uniqueParticipants, skipped: skipped + participants.length - uniqueParticipants.length };
 }
 
@@ -93,6 +94,16 @@ export default async function DmuEventDetailPage({
         include: {
           surveyTemplate: { select: { name: true } },
           scheduledSends: { orderBy: { sendAt: "asc" } },
+          invitations: {
+            select: {
+              id: true,
+              status: true,
+              deliveryStatus: true,
+              reminderStatus: true,
+              sentAt: true,
+              reminderSentAt: true,
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
       },
@@ -107,6 +118,25 @@ export default async function DmuEventDetailPage({
   const scheduledSend = survey?.scheduledSends[0];
   const isLocked = survey?.status === "SENT" || survey?.status === "CLOSED" || scheduledSend?.status === "PROCESSED";
 
+  // ── Leveringsstatus-aggregater ────────────────────────────────────────────
+  const invitations = survey?.invitations ?? [];
+  const inviteStats = {
+    total: invitations.length,
+    sent: invitations.filter((i) => i.deliveryStatus === "SENT").length,
+    pending: invitations.filter((i) => i.deliveryStatus === "PENDING" || i.deliveryStatus === "SENDING").length,
+    failed: invitations.filter((i) => i.deliveryStatus === "FAILED").length,
+    answered: invitations.filter((i) => i.status === "ANSWERED").length,
+    reminderSent: invitations.filter((i) => i.reminderStatus === "SENT").length,
+    reminderPending: invitations.filter((i) => i.reminderStatus === "PENDING").length,
+  };
+
+  const canSendNow =
+    survey?.status === "SCHEDULED" &&
+    scheduledSend?.status === "PENDING" &&
+    event.participants.length > 0;
+
+  // ── Server Actions ────────────────────────────────────────────────────────
+
   async function addParticipantsAction(formData: FormData) {
     "use server";
     await requireRole("DMU_ADMIN");
@@ -120,7 +150,7 @@ export default async function DmuEventDetailPage({
     }
 
     await prisma.eventParticipant.createMany({
-      data: parsed.participants.map((participant) => ({ ...participant, eventId: id })),
+      data: parsed.participants.map((p) => ({ ...p, eventId: id })),
       skipDuplicates: true,
     });
 
@@ -171,15 +201,11 @@ export default async function DmuEventDetailPage({
     redirect(`/dmu/events/${id}?success=participant_removed`);
   }
 
-  const status = surveyStatusLabel[survey?.status ?? "SCHEDULED"] ?? "Planlagt";
-
   async function closeSurveyAction() {
     "use server";
     await requireRole("DMU_ADMIN");
 
-    if (!survey || survey.status !== "SENT") {
-      return;
-    }
+    if (!survey || survey.status !== "SENT") return;
 
     await prisma.surveyInstance.update({
       where: { id: survey.id },
@@ -191,6 +217,36 @@ export default async function DmuEventDetailPage({
     revalidatePath("/dmu/dashboard");
   }
 
+  async function sendNowAction() {
+    "use server";
+    await requireRole("DMU_ADMIN");
+
+    if (!survey || survey.status !== "SCHEDULED") {
+      redirect(`/dmu/events/${id}?error=cannot_send_now`);
+    }
+
+    // Sæt sendAt til nu så cron-logikken behandler den med det samme
+    const send = survey.scheduledSends[0];
+    if (send) {
+      await prisma.scheduledSend.update({
+        where: { id: send.id },
+        data: { sendAt: new Date() },
+      });
+    }
+
+    // Kald direkte (kører synkront – acceptabelt for en manuel trigger)
+    await processDueScheduledSends();
+
+    revalidatePath(`/dmu/events/${id}`);
+    revalidatePath("/dmu/calendar");
+    revalidatePath("/dmu/dashboard");
+    redirect(`/dmu/events/${id}?success=sent_now`);
+  }
+
+  // ── Feedback messages ─────────────────────────────────────────────────────
+
+  const status = surveyStatusLabel[survey?.status ?? "SCHEDULED"] ?? "Planlagt";
+
   const feedbackMessage =
     feedback.success === "participants_added"
       ? `Deltagerlisten er opdateret${Number(feedback.skipped ?? 0) > 0 ? `. ${feedback.skipped} ugyldige eller dublerede rækker blev sprunget over.` : "."}`
@@ -198,34 +254,63 @@ export default async function DmuEventDetailPage({
         ? "Deltageren er gemt."
         : feedback.success === "participant_removed"
           ? "Deltageren er fjernet."
-          : feedback.error === "no_valid_participants"
-            ? "Indsæt mindst én gyldig e-mailadresse."
-            : feedback.error === "invalid_participant"
-              ? "Kontrollér navn og e-mailadresse."
-              : feedback.error === "list_locked"
-                ? "Deltagerlisten er låst, fordi spørgeskemaet allerede er sendt eller lukket."
-                : null;
+          : feedback.success === "sent_now"
+            ? `✓ Udsendelse igangsat – ${event.participants.length} invitationer er under afsendelse.`
+            : feedback.error === "no_valid_participants"
+              ? "Indsæt mindst én gyldig e-mailadresse."
+              : feedback.error === "invalid_participant"
+                ? "Kontrollér navn og e-mailadresse."
+                : feedback.error === "list_locked"
+                  ? "Deltagerlisten er låst, fordi spørgeskemaet allerede er sendt eller lukket."
+                  : feedback.error === "cannot_send_now"
+                    ? "Kan ikke sende nu – spørgeskemaet er ikke i planlagt tilstand."
+                    : null;
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
+      {/* Topbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/dmu/calendar" className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">
           ← Tilbage til kalender
         </Link>
         <div className="flex items-center gap-2">
-          {survey?.status === "SENT" ? (
-            <form action={closeSurveyAction}>
-              <button type="submit" className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">
-                Luk spørgeskema nu
+          {canSendNow && (
+            <form action={sendNowAction}>
+              <button
+                type="submit"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Send nu
               </button>
             </form>
-          ) : null}
-          <span className={`rounded-full px-3 py-1 text-sm font-medium ${status === "Sendt" ? "bg-emerald-100 text-emerald-900" : status === "Lukket" ? "bg-stone-200 text-stone-900" : "bg-sky-100 text-sky-900"}`}>
+          )}
+          {survey?.status === "SENT" && (
+            <form action={closeSurveyAction}>
+              <button
+                type="submit"
+                className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+              >
+                Luk spørgeskema
+              </button>
+            </form>
+          )}
+          <span
+            className={`rounded-full px-3 py-1 text-sm font-medium ${
+              status === "Sendt"
+                ? "bg-emerald-100 text-emerald-900"
+                : status === "Lukket"
+                  ? "bg-stone-200 text-stone-900"
+                  : "bg-sky-100 text-sky-900"
+            }`}
+          >
             {status}
           </span>
         </div>
       </div>
 
+      {/* Event-info */}
       <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/75">Arrangement</p>
         <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">{event.title}</h2>
@@ -255,19 +340,67 @@ export default async function DmuEventDetailPage({
         </div>
       </section>
 
+      {/* Feedback */}
       {feedbackMessage ? (
-        <div className={`rounded-xl border px-4 py-3 text-sm ${feedback.error ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            feedback.error
+              ? "border-red-200 bg-red-50 text-red-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
           {feedbackMessage}
         </div>
       ) : null}
 
+      {/* Leveringsstatus (vises kun efter udsendelse) */}
+      {invitations.length > 0 && (
+        <section className="rounded-xl border bg-background p-6">
+          <h3 className="text-base font-semibold">Leveringsstatus</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Aggregeret oversigt – ingen persondata vises.
+          </p>
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <article className="rounded-lg border bg-muted/20 p-4 text-center">
+              <p className="text-2xl font-bold text-emerald-700">{inviteStats.answered}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Besvaret</p>
+            </article>
+            <article className="rounded-lg border bg-muted/20 p-4 text-center">
+              <p className="text-2xl font-bold">{inviteStats.sent}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Invitationer leveret</p>
+            </article>
+            <article className="rounded-lg border bg-muted/20 p-4 text-center">
+              <p className="text-2xl font-bold text-sky-700">{inviteStats.reminderSent}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Påmindelser sendt</p>
+            </article>
+            <article className="rounded-lg border bg-muted/20 p-4 text-center">
+              <p className={`text-2xl font-bold ${inviteStats.failed > 0 ? "text-red-600" : ""}`}>
+                {inviteStats.failed}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Leveringsfejl</p>
+            </article>
+          </div>
+          {(inviteStats.pending > 0 || inviteStats.reminderPending > 0) && (
+            <p className="mt-4 text-xs text-muted-foreground">
+              {inviteStats.pending > 0 && `${inviteStats.pending} invitation(er) afventer afsendelse. `}
+              {inviteStats.reminderPending > 0 && `${inviteStats.reminderPending} påmindelse(r) planlagt.`}
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* Deltagere */}
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-xl font-semibold">Deltagere</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Upload listen på arrangementsdagen. Den bruges kun til denne udsendelse.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Upload listen på arrangementsdagen. Den bruges kun til denne udsendelse.
+            </p>
           </div>
-          <span className="rounded-full border bg-muted/30 px-3 py-1 text-sm text-muted-foreground">{event.participants.length} tilføjet</span>
+          <span className="rounded-full border bg-muted/30 px-3 py-1 text-sm text-muted-foreground">
+            {event.participants.length} tilføjet
+          </span>
         </div>
 
         {isLocked ? (
@@ -278,9 +411,20 @@ export default async function DmuEventDetailPage({
           <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.8fr)]">
             <form action={addParticipantsAction} className="rounded-2xl border bg-background p-5">
               <h4 className="font-semibold">Indsæt fra Excel</h4>
-              <p className="mt-1 text-sm text-muted-foreground">Indsæt en e-mail pr. række eller to kolonner med navn og e-mail.</p>
-              <textarea name="pasteData" rows={8} required placeholder={"Mette Jensen\tmette@example.dk\nrasmus@example.dk"} className="mt-4 font-mono" />
-              <button type="submit" className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+              <p className="mt-1 text-sm text-muted-foreground">
+                Indsæt en e-mail pr. række, eller to kolonner med navn og e-mail.
+              </p>
+              <textarea
+                name="pasteData"
+                rows={8}
+                required
+                placeholder={"Mette Jensen\tmette@example.dk\nrasmus@example.dk"}
+                className="mt-4 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="submit"
+                className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              >
                 Tilføj deltagere
               </button>
             </form>
@@ -288,10 +432,23 @@ export default async function DmuEventDetailPage({
             <form action={addSingleParticipantAction} className="rounded-2xl border bg-background p-5">
               <h4 className="font-semibold">Tilføj enkeltvis</h4>
               <div className="mt-4 space-y-3">
-                <input name="name" placeholder="Navn (valgfrit)" />
-                <input name="email" type="email" required placeholder="navn@example.dk" />
+                <input
+                  name="name"
+                  placeholder="Navn (valgfrit)"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="navn@example.dk"
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
               </div>
-              <button type="submit" className="mt-4 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">
+              <button
+                type="submit"
+                className="mt-4 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+              >
                 Gem deltager
               </button>
             </form>
@@ -321,11 +478,16 @@ export default async function DmuEventDetailPage({
                       {!isLocked ? (
                         <form action={removeParticipantAction}>
                           <input type="hidden" name="participantId" value={participant.id} />
-                          <button type="submit" className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                          <button
+                            type="submit"
+                            className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+                          >
                             Fjern
                           </button>
                         </form>
-                      ) : <span className="text-xs text-muted-foreground">Låst</span>}
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Låst</span>
+                      )}
                     </td>
                   </tr>
                 ))}

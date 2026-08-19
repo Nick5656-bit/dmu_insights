@@ -392,8 +392,8 @@ export async function processDueSurveyReminders() {
     const baseMailLog = {
       surveyInvitationId: candidate.id,
       toEmail: candidate.emailSnapshot,
-      subject: `Paamindelse: Din mening om ${candidate.surveyInstance.name}`,
-      bodyPreview: "En enkelt paamindelse med det personlige besvarelseslink er sendt.",
+      subject: `Påmindelse: Din mening om ${candidate.surveyInstance.name}`,
+      bodyPreview: "En enkelt påmindelse med det personlige besvarelseslink er sendt.",
       sentAt: now,
     };
 
