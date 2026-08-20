@@ -398,3 +398,12 @@ model SystemJobRun {
 
   @@index([jobName, startedAt])
 }
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  ip        String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
+}
