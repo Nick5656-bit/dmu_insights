@@ -28,7 +28,6 @@ export function LoginForm({ error }: { error?: string }) {
             required
             autoComplete="email"
             placeholder="E-mail"
-            disabled={loading}
           />
         </div>
 
@@ -46,7 +45,6 @@ export function LoginForm({ error }: { error?: string }) {
             required
             autoComplete="current-password"
             placeholder="Adgangskode"
-            disabled={loading}
           />
         </div>
       </div>
