@@ -44,9 +44,9 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold">TrafikmÃ¥ling</h2>
+            <h2 className="text-lg font-semibold">Trafikmåling og hastighed</h2>
             <p className="mt-2 text-muted-foreground">
-              DMU bruger Vercel Web Analytics til at se samlede tal for besÃ¸g og sidevisninger, sÃ¥ platformen kan forbedres. Personlige survey-links og selve besvarelsessiderne er udelukket fra denne trafikmÃ¥ling.
+              DMU bruger Vercel Web Analytics og Vercel Speed Insights til at se samlede tal for besøg, sidevisninger og tekniske hastighedsmål, så platformen kan forbedres. Personlige survey-links og selve besvarelsessiderne er udelukket fra begge målinger.
             </p>
           </section>
 
