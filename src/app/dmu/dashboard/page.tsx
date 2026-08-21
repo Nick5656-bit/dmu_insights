@@ -303,89 +303,125 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     { label: "Filtre", value: activeFilters.length, hint: activeFilters.length > 0 ? "Aktive" : "Ingen valgt" },
   ];
 
-  const scopePills = activeFilters.length > 0 ? activeFilters : ["Hele DMU"];
-
   return (
     <div className="space-y-6">
+      {/* ── Filterpanel ─────────────────────────────────────────────────── */}
       <section className="overflow-visible rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="max-w-3xl space-y-4">
-            <span className="inline-flex w-fit items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white/90">
+
+        {/* Topbar: titel + kompakte handlingsknapper */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white/90">
               Analyse
             </span>
-            <div className="space-y-2 text-white/75 [&_p]:text-white/75">
-              <h1 className="font-heading text-3xl font-semibold tracking-tight text-white md:text-4xl">National analyse</h1>
-              <p className="max-w-2xl text-sm text-muted-foreground">Benchmark, klubsammenligning og åbne svar samlet i ét arbejdsrum.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {scopePills.map((pill) => (
-                <span
-                  key={pill}
-                  className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85"
-                >
-                  {pill}
-                </span>
-              ))}
-            </div>
+            <h1 className="font-heading text-2xl font-semibold tracking-tight text-white">National analyse</h1>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:w-[320px]">
+          {/* Kompakte handlingsknapper */}
+          <div className="flex flex-wrap items-center gap-2">
             {surveyActionLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/16"
+                className="rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/18"
               >
                 {link.label}
               </Link>
             ))}
             <a
               href={exportHref}
-              className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/16"
+              className="rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/18"
             >
               Eksportér resultater
             </a>
           </div>
         </div>
 
-        <form className="mt-6 grid gap-3 rounded-[24px] border border-white/12 bg-white/8 p-4 backdrop-blur-sm md:grid-cols-7" method="get">
+        {/* Aktive filter-pills – kun synlige når filtre er valgt */}
+        {activeFilters.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {activeFilters.map((pill) => (
+              <span
+                key={pill}
+                className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85"
+              >
+                {pill}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Filterrækken */}
+        <form className="mt-4 grid gap-2 rounded-[24px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm md:grid-cols-7" method="get">
           <ClubMultiSelectFilter clubs={clubs} initialSelectedIds={selectedClubIds} />
 
-          <select name="surveyTemplateId" defaultValue={selectedTemplate?.id ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground md:col-span-1">
-            <option value="">Alle skabeloner</option>
-            {availableTemplates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name} ({template.surveyType.toLowerCase()} · {template._count.surveyInstances} udsendelser)
-              </option>
-            ))}
-          </select>
+          {/* Skabelon */}
+          <div className="relative md:col-span-1">
+            <select
+              name="surveyTemplateId"
+              defaultValue={selectedTemplate?.id ?? ""}
+              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
+            >
+              <option value="">Alle skabeloner</option>
+              {availableTemplates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} ({template.surveyType.toLowerCase()} · {template._count.surveyInstances} udsendelser)
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
 
-          <select name="ageGroup" defaultValue={ageGroupFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground md:col-span-1">
-            <option value="">Alle aldre</option>
-            {ageGroupOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {/* Alder */}
+          <div className="relative md:col-span-1">
+            <select
+              name="ageGroup"
+              defaultValue={ageGroupFilter ?? ""}
+              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
+            >
+              <option value="">Alle aldre</option>
+              {ageGroupOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
 
-          <select name="raceClass" defaultValue={raceClassFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground md:col-span-1">
-            <option value="">Alle klasser</option>
-            {raceClassOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {/* Klasse */}
+          <div className="relative md:col-span-1">
+            <select
+              name="raceClass"
+              defaultValue={raceClassFilter ?? ""}
+              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
+            >
+              <option value="">Alle klasser</option>
+              {raceClassOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
 
-          <select name="memberRole" defaultValue={memberRoleFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground md:col-span-1">
-            <option value="">Alle roller</option>
-            {memberRoleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {/* Rolle */}
+          <div className="relative md:col-span-1">
+            <select
+              name="memberRole"
+              defaultValue={memberRoleFilter ?? ""}
+              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
+            >
+              <option value="">Alle roller</option>
+              {memberRoleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
 
           <button
             type="submit"
@@ -403,6 +439,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         </form>
       </section>
 
+      {/* ── Statistik-kort ───────────────────────────────────────────────── */}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card) => (
           <article key={card.label} className="rounded-[24px] border border-border/70 bg-card p-5 shadow-sm">
@@ -413,6 +450,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         ))}
       </section>
 
+      {/* ── Klubsammenligning + sidepanel ────────────────────────────────── */}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
         <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -436,16 +474,11 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
 
         <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <div className="space-y-3">
-            <div className="rounded-[22px] border border-primary/15 bg-primary/5 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/80">Adgang</p>
-              <p className="mt-2 text-sm text-foreground">Kun DMU ser klubniveau og direkte links til klubberne.</p>
-            </div>
-
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">National score</p>
                 <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
-                  {nationalKeyAverage > 0 ? nationalKeyAverage.toFixed(2) : "-"}
+                  {nationalKeyAverage > 0 ? nationalKeyAverage.toFixed(2) : "–"}
                 </p>
               </div>
               <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
@@ -492,6 +525,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         </article>
       </section>
 
+      {/* ── Spørgsmålsfordeling ──────────────────────────────────────────── */}
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -508,6 +542,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         </div>
       </section>
 
+      {/* ── Åbne svar ────────────────────────────────────────────────────── */}
       {dmuImprovementQuestion ? (
         <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
