@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter, Manrope } from "next/font/google";
+import { Analytics, type BeforeSendEvent } from "@vercel/analytics/next";
 import "./globals.css";
+
+function excludePersonalSurveyLinks(event: BeforeSendEvent) {
+  // A survey URL contains a single-use token and must never be included in traffic analytics.
+  return event.url.includes("/survey/") ? null : event;
+}
 
 const inter = Inter({
   variable: "--font-inter",
@@ -41,6 +47,7 @@ export default function RootLayout({
         className={`${inter.className} ${inter.variable} ${manrope.variable} ${geistMono.variable} antialiased`}
       >
         {children}
+        <Analytics beforeSend={excludePersonalSurveyLinks} />
       </body>
     </html>
   );

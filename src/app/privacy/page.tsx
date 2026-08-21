@@ -44,6 +44,13 @@ export default function PrivacyPage() {
           </section>
 
           <section>
+            <h2 className="text-lg font-semibold">TrafikmÃ¥ling</h2>
+            <p className="mt-2 text-muted-foreground">
+              DMU bruger Vercel Web Analytics til at se samlede tal for besÃ¸g og sidevisninger, sÃ¥ platformen kan forbedres. Personlige survey-links og selve besvarelsessiderne er udelukket fra denne trafikmÃ¥ling.
+            </p>
+          </section>
+
+          <section>
             <h2 className="text-lg font-semibold">Opbevaring og sletning</h2>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
               <li>Navn, e-mail, deltagerlister og mailhistorik slettes eller anonymiseres {PII_RETENTION_DAYS} dage efter surveyets lukning.</li>
