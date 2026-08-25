@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DmuContentTabs } from "@/components/dmu-content-tabs";
 import { QuestionEditCard } from "./question-edit-card";
+import { QuestionCreateForm } from "./question-create-form";
 
 function normalizeKeyPart(value: string): string {
   return value
@@ -91,6 +92,22 @@ function resolveBenchmarkCategory(selected: string | undefined, custom: string |
   return selected;
 }
 
+function resolveOptionLabels(formData: FormData, fallbackRaw: string | undefined): string[] {
+  const dynamicOptions = formData
+    .getAll("optionLabel")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+
+  if (dynamicOptions.length > 0) {
+    return dynamicOptions;
+  }
+
+  return (fallbackRaw ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 type DmuQuestionsPageProps = {
   searchParams: Promise<{
     benchmarkCategory?: string;
@@ -171,10 +188,7 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
     const resolvedBenchmarkCategory = resolveBenchmarkCategory(data.benchmarkCategory, data.benchmarkCategoryCustom);
     const options =
       data.questionType === "SINGLE_CHOICE"
-        ? (data.optionsRaw ?? "")
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean)
+        ? resolveOptionLabels(formData, data.optionsRaw)
         : [];
 
     if (data.questionType === "SINGLE_CHOICE" && options.length < 2) {
@@ -187,7 +201,10 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
         description: data.description || null,
         questionType: data.questionType,
         scope: "DMU_STANDARD",
-        benchmarkKey: buildBenchmarkKey(resolvedBenchmarkCategory, data.benchmarkCode ?? "", data.title),
+        benchmarkKey:
+          data.questionType === "SCALE_1_5"
+            ? buildBenchmarkKey(resolvedBenchmarkCategory, data.benchmarkCode ?? "", data.title)
+            : null,
         active: true,
       },
     });
@@ -336,73 +353,8 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
       </section>
 
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold">Nyt spørgsmål</h2>
-        <form action={createQuestionAction} className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium" htmlFor="title">
-              Spørgsmålstekst
-            </label>
-            <input id="title" name="title" required className="w-full rounded-md border px-3 py-2 text-sm" />
-          </div>
-
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium" htmlFor="description">
-              Beskrivelse (valgfri)
-            </label>
-            <input id="description" name="description" className="w-full rounded-md border px-3 py-2 text-sm" />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor="questionType">
-              Type
-            </label>
-            <select id="questionType" name="questionType" defaultValue="SCALE_1_5" className="w-full rounded-md border px-3 py-2 text-sm">
-              <option value="SCALE_1_5">Skala 1-5</option>
-              <option value="SINGLE_CHOICE">Valgmuligheder</option>
-              <option value="TEXT">Tekst</option>
-            </select>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor="benchmarkCategory">
-              Benchmark-kategori (valgfri)
-            </label>
-            <select id="benchmarkCategory" name="benchmarkCategory" defaultValue="" className="w-full rounded-md border px-3 py-2 text-sm">
-              <option value="">Ingen benchmark</option>
-              {benchmarkCategoryOptions.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-            <input
-              name="benchmarkCategoryCustom"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              placeholder="Ny kategori (valgfri)"
-            />
-            <p className="text-xs text-muted-foreground">Ny kategori overskriver valgt kategori.</p>
-          </div>
-
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium" htmlFor="benchmarkCode">
-              Benchmark-kode (valgfri)
-            </label>
-            <input id="benchmarkCode" name="benchmarkCode" className="w-full rounded-md border px-3 py-2 text-sm" placeholder="fx OVERALL eller ACTIVITY_VALUE" />
-          </div>
-
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium" htmlFor="optionsRaw">
-              Svarmuligheder (kommasepareret)
-            </label>
-            <input id="optionsRaw" name="optionsRaw" className="w-full rounded-md border px-3 py-2 text-sm" placeholder="Meget positivt, Positivt, Neutralt" />
-          </div>
-
-          <div className="md:col-span-2">
-            <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-              Opret spørgsmål
-            </button>
-          </div>
-        </form>
+        <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Nyt spørgsmål</h2>
+        <QuestionCreateForm action={createQuestionAction} benchmarkCategoryOptions={benchmarkCategoryOptions} />
       </section>
 
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
