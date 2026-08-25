@@ -24,19 +24,19 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
   const rowsWithData = useMemo(() => rows.filter((row) => !row.suppressed), [rows]);
 
   const categories = useMemo(() => {
-    return ["ALLE", ...Array.from(new Set(rowsWithData.map((row) => row.category))).sort((a, b) => a.localeCompare(b, "da"))];
-  }, [rowsWithData]);
+    return ["ALLE", ...Array.from(new Set(rows.map((row) => row.category))).sort((a, b) => a.localeCompare(b, "da"))];
+  }, [rows]);
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    return rowsWithData.filter((row) => {
+    return rows.filter((row) => {
       const matchesCategory = selectedCategory === "ALLE" || row.category === selectedCategory;
       const matchesSearch = normalizedSearch.length === 0 || row.questionTitle.toLowerCase().includes(normalizedSearch);
 
       return matchesCategory && matchesSearch;
     });
-  }, [rowsWithData, searchTerm, selectedCategory]);
+  }, [rows, searchTerm, selectedCategory]);
 
   const groupedRows = useMemo(() => {
     const map = new Map<string, BenchmarkRow[]>();
@@ -89,15 +89,13 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
         </div>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          Viser {filteredRows.length} af {rowsWithData.length} spørgsmål med tilstrækkeligt datagrundlag.
+          Viser {filteredRows.length} af {rows.length} spørgsmål · {rowsWithData.length} med resultater.
         </p>
       </div>
 
       {groupedRows.length === 0 ? (
         <div className="rounded-2xl border border-dashed p-6 text-sm text-muted-foreground">
-          {rowsWithData.length === 0
-            ? `Ingen resultater at vise endnu. Resultater vises, når der er mindst ${suppressionThreshold} svar.`
-            : "Ingen spørgsmål matcher de valgte filtre."}
+          {rows.length === 0 ? "Der er endnu ikke oprettet benchmarkspørgsmål." : "Ingen spørgsmål matcher de valgte filtre."}
         </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-3">

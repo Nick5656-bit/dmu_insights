@@ -53,36 +53,39 @@ export function QuestionDistributionTile({
         </div>
         <div className="flex flex-col items-end gap-2 text-right">
           <div className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-muted-foreground">
-            {count} svar
+            {suppressed ? "Afventer svar" : `${count} svar`}
           </div>
-          <div className="inline-flex rounded-md border bg-background p-0.5">
-            <button
-              type="button"
-              onClick={() => setChartType("donut")}
-              className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${
-                chartType === "donut" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              }`}
-              aria-pressed={chartType === "donut"}
-            >
-              Donut
-            </button>
-            <button
-              type="button"
-              onClick={() => setChartType("bar")}
-              className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${
-                chartType === "bar" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              }`}
-              aria-pressed={chartType === "bar"}
-            >
-              Søjler
-            </button>
-          </div>
+          {!suppressed && (
+            <div className="inline-flex rounded-md border bg-background p-0.5">
+              <button
+                type="button"
+                onClick={() => setChartType("donut")}
+                className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${
+                  chartType === "donut" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                }`}
+                aria-pressed={chartType === "donut"}
+              >
+                Donut
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartType("bar")}
+                className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${
+                  chartType === "bar" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                }`}
+                aria-pressed={chartType === "bar"}
+              >
+                Søjler
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {suppressed ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-          Skjult af anonymitet (kræver mindst {suppressionThreshold} svar)
+        <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Ingen resultater endnu</p>
+          <p className="mt-1">Resultater vises, når der er mindst {suppressionThreshold} svar.</p>
         </div>
       ) : (
         <>

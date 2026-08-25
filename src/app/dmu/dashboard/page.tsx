@@ -471,31 +471,33 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         ))}
       </section>
 
-      {/* ── Klubsammenligning – kun når flere klubber er valgt ───────────── */}
-      {shouldShowClubComparison && (
-        <section>
-          <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Klubsammenligning</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Sammenligning af de valgte klubber mod nationalt niveau.</p>
+      {/* ── Klubsammenligning ───────────────────────────────────────────── */}
+      <section>
+        <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Klubsammenligning</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Sammenligning af udvalgte klubber mod nationalt niveau.</p>
+            </div>
+            <span className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">Skala 1-5</span>
+          </div>
+
+          <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
+            {shouldShowClubComparison && clubComparisonRows.length > 0 ? (
+              <ClubComparisonChart data={clubComparisonRows} />
+            ) : (
+              <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">Ingen resultater endnu</p>
+                <p className="mt-1">
+                  {selectedClubs.length < 2
+                    ? "Vælg mindst to klubber for at sammenligne deres resultater."
+                    : `Sammenligning vises, når hver klub har mindst ${SUPPRESSION_THRESHOLD} svar på det samme spørgsmål.`}
+                </p>
               </div>
-              <span className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">Skala 1-5</span>
-            </div>
-
-            <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
-              {clubComparisonRows.length > 0 ? (
-                <ClubComparisonChart data={clubComparisonRows} />
-              ) : (
-                <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-                  For få svar til sammenligning i det valgte udsnit.
-                </div>
-              )}
-            </div>
-          </article>
-
-        </section>
-      )}
+            )}
+          </div>
+        </article>
+      </section>
 
       {/* ── Spørgsmålsfordeling ──────────────────────────────────────────── */}
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
@@ -504,7 +506,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Spørgsmålsfordeling</h2>
           </div>
           <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-            {visibleBenchmarkCount} spørgsmål med data
+            {benchmarkRows.length} spørgsmål · {visibleBenchmarkCount} med resultater
           </span>
         </div>
 
@@ -555,7 +557,24 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             </div>
           )}
         </section>
-      ) : null}
+      ) : (
+        <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Åbne svar</p>
+              <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground">Fritekstbesvarelser</h2>
+              <p className="mt-2 text-sm text-muted-foreground">Kommentarer vises her, når et fritekstspørgsmål har et tilstrækkeligt datagrundlag.</p>
+            </div>
+            <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
+              Ingen resultater endnu
+            </span>
+          </div>
+
+          <div className="mt-5 rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+            Åbne svar vises, når der er mindst {SUPPRESSION_THRESHOLD} svar på et fritekstspørgsmål.
+          </div>
+        </section>
+      )}
     </div>
   );
 }
