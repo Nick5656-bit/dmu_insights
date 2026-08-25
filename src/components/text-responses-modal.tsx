@@ -5,13 +5,14 @@ import { useState } from "react";
 export type TextResponseEntry = {
   text: string;
   clubName?: string; // shown in DMU view; hidden in club view
-  submittedAt: string; // ISO string (Date not serializable from server)
+  submittedAt?: string; // ISO string (Date not serializable from server)
 };
 
 type Props = {
   questionTitle: string;
   responses: TextResponseEntry[];
   triggerLabel?: string;
+  showMetadata?: boolean;
 };
 
 function formatDate(iso: string) {
@@ -26,6 +27,7 @@ export function TextResponsesModal({
   questionTitle,
   responses,
   triggerLabel = "Se alle besvarelser",
+  showMetadata = true,
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -84,14 +86,16 @@ export function TextResponsesModal({
                     className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3"
                   >
                     <p className="text-sm leading-relaxed">{r.text}</p>
+                    {showMetadata && (r.clubName || r.submittedAt) && (
                     <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
                       {r.clubName && (
                         <span className="rounded-full bg-muted px-2 py-0.5 font-medium">
                           {r.clubName}
                         </span>
                       )}
-                      <span>{formatDate(r.submittedAt)}</span>
+                      {r.submittedAt && <span>{formatDate(r.submittedAt)}</span>}
                     </div>
+                    )}
                   </div>
                 ))
               )}

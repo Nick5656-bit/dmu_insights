@@ -3,6 +3,7 @@ import { AgeGroup, MemberRole, RaceClass } from "@prisma/client";
 import { ClubComparisonChart } from "@/components/charts/benchmark-bar-chart";
 import { QuestionDistributionBoard } from "@/components/charts/question-distribution-board";
 import { ClubMultiSelectFilter } from "@/components/club-multi-select-filter";
+import { OpenTextQuestionSelect } from "@/components/open-text-question-select";
 import { TextResponsesModal } from "@/components/text-responses-modal";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -40,6 +41,7 @@ type DmuDashboardProps = {
     memberRole?: string;
     surveyTemplateId?: string;
     clubIds?: string | string[];
+    textQuestionId?: string;
   }>;
 };
 
@@ -198,18 +200,33 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     });
   }
 
+  const clubsInScope = selectedClubs.length > 0 ? selectedClubs : clubs;
   const keyQuestion = benchmarkQuestions[0];
   const clubComparisonRows: { label: string; own: number; benchmark: number }[] = [];
-  const clubTableRows: { clubId: string; clubName: string; count: number; avg: number | null; suppressed: boolean }[] = [];
-  const clubsToCompare = selectedClubs.length > 0 ? selectedClubs : clubs;
+  const shouldShowClubComparison = selectedClubs.length >= 2;
+  const comparisonTemplateInstanceIds =
+    shouldShowClubComparison && selectedTemplate
+      ? (
+          await prisma.surveyInstance.findMany({
+            where: { surveyTemplateId: selectedTemplate.id },
+            select: { id: true },
+          })
+        ).map((instance) => instance.id)
+      : [];
+  const comparisonResponseWhere = {
+    ...(selectedTemplate ? { surveyInstanceId: { in: comparisonTemplateInstanceIds } } : {}),
+    ...(ageGroupFilter ? { ageGroup: ageGroupFilter } : {}),
+    ...(raceClassFilter ? { raceClass: raceClassFilter } : {}),
+    ...(memberRoleFilter ? { memberRole: memberRoleFilter } : {}),
+  };
 
   let nationalKeyAverage = 0;
-  if (keyQuestion) {
+  if (shouldShowClubComparison && keyQuestion) {
     const nationalCount = await prisma.surveyAnswer.count({
       where: {
         questionId: keyQuestion.id,
         numericValue: { not: null },
-        surveyResponse: responseWhere,
+        surveyResponse: comparisonResponseWhere,
       },
     });
 
@@ -218,27 +235,26 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         where: {
           questionId: keyQuestion.id,
           numericValue: { not: null },
-          surveyResponse: responseWhere,
+          surveyResponse: comparisonResponseWhere,
         },
         _avg: { numericValue: true },
       });
       nationalKeyAverage = Number((nationalAgg._avg.numericValue ?? 0).toFixed(2));
     }
 
-    for (const club of clubsToCompare) {
+    for (const club of selectedClubs) {
       const clubCountForKeyQuestion = await prisma.surveyAnswer.count({
         where: {
           questionId: keyQuestion.id,
           numericValue: { not: null },
           surveyResponse: {
-            ...responseWhere,
+            ...comparisonResponseWhere,
             clubId: club.id,
           },
         },
       });
 
       if (clubCountForKeyQuestion < SUPPRESSION_THRESHOLD || nationalKeyAverage === 0) {
-        clubTableRows.push({ clubId: club.id, clubName: club.name, count: clubCountForKeyQuestion, avg: null, suppressed: true });
         continue;
       }
 
@@ -247,7 +263,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
           questionId: keyQuestion.id,
           numericValue: { not: null },
           surveyResponse: {
-            ...responseWhere,
+            ...comparisonResponseWhere,
             clubId: club.id,
           },
         },
@@ -255,13 +271,6 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
       });
 
       const clubAvg = Number((clubAgg._avg.numericValue ?? 0).toFixed(2));
-      clubTableRows.push({
-        clubId: club.id,
-        clubName: club.name,
-        count: clubCountForKeyQuestion,
-        avg: clubAvg,
-        suppressed: false,
-      });
       clubComparisonRows.push({
         label: club.name.length > 20 ? `${club.name.slice(0, 20)}...` : club.name,
         own: clubAvg,
@@ -270,35 +279,47 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     }
   }
 
-  const dmuImprovementQuestion = await prisma.question.findFirst({
-    where: { benchmarkKey: "DMU_CENTRAL_IMPROVEMENT", scope: "DMU_STANDARD" },
+  const textAnswerCounts = await prisma.surveyAnswer.groupBy({
+    by: ["questionId"],
+    where: {
+      textValue: { not: "" },
+      question: { active: true, questionType: "TEXT" },
+      surveyResponse: responseWhere,
+    },
+    _count: { _all: true },
   });
 
-  const dmuImprovementAnswers = dmuImprovementQuestion
+  const eligibleTextQuestionIds = textAnswerCounts
+    .filter((entry) => entry._count._all >= SUPPRESSION_THRESHOLD)
+    .map((entry) => entry.questionId);
+  const textQuestionCounts = new Map(textAnswerCounts.map((entry) => [entry.questionId, entry._count._all]));
+  const textQuestions =
+    eligibleTextQuestionIds.length > 0
+      ? await prisma.question.findMany({
+          where: { id: { in: eligibleTextQuestionIds }, active: true, questionType: "TEXT" },
+          select: { id: true, title: true },
+          orderBy: { title: "asc" },
+        })
+      : [];
+  const selectedTextQuestion = textQuestions.find((question) => question.id === params.textQuestionId) ?? textQuestions[0];
+
+  const textResponses = selectedTextQuestion
     ? await prisma.surveyAnswer.findMany({
         where: {
-          questionId: dmuImprovementQuestion.id,
-          textValue: { not: null },
+          questionId: selectedTextQuestion.id,
+          textValue: { not: "" },
           surveyResponse: responseWhere,
         },
-        include: {
-          surveyResponse: {
-            select: { submittedAt: true, clubId: true },
-          },
-        },
+        select: { textValue: true },
         orderBy: { surveyResponse: { submittedAt: "desc" } },
       })
     : [];
 
-  const improvementResponses = dmuImprovementAnswers.map((answer) => ({
-    text: answer.textValue!,
-    clubName: clubs.find((club) => club.id === answer.surveyResponse.clubId)?.name ?? "Ukendt klub",
-    submittedAt: answer.surveyResponse.submittedAt.toISOString(),
-  }));
+  const visibleBenchmarkCount = benchmarkRows.filter((row) => !row.suppressed).length;
 
   const summaryCards = [
     { label: "Besvarelser", value: totalResponses, hint: "I valgt udsnit" },
-    { label: "Klubber", value: clubsToCompare.length, hint: selectedClubs.length > 0 ? "Udvalgte klubber" : "Aktive klubber" },
+    { label: "Klubber", value: clubsInScope.length, hint: selectedClubs.length > 0 ? "Udvalgte klubber" : "Aktive klubber" },
     { label: "Benchmarks", value: benchmarkQuestions.length, hint: "Skala 1-5" },
     { label: "Filtre", value: activeFilters.length, hint: activeFilters.length > 0 ? "Aktive" : "Ingen valgt" },
   ];
@@ -450,90 +471,40 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         ))}
       </section>
 
-      {/* ── Klubsammenligning + sidepanel ────────────────────────────────── */}
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
-        <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Klubsammenligning</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Score mod nationalt niveau på det første benchmarkspørgsmål.</p>
-            </div>
-            <span className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">Skala 1-5</span>
-          </div>
-
-          <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
-            {clubComparisonRows.length > 0 ? (
-              <ClubComparisonChart data={clubComparisonRows} />
-            ) : (
-              <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-                For få svar til sammenligning i det valgte udsnit.
+      {/* ── Klubsammenligning – kun når flere klubber er valgt ───────────── */}
+      {shouldShowClubComparison && (
+        <section>
+          <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Klubsammenligning</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Sammenligning af de valgte klubber mod nationalt niveau.</p>
               </div>
-            )}
-          </div>
-        </article>
-
-        <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">National score</p>
-                <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
-                  {nationalKeyAverage > 0 ? nationalKeyAverage.toFixed(2) : "–"}
-                </p>
-              </div>
-              <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Åbne svar</p>
-                <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">{improvementResponses.length}</p>
-              </div>
+              <span className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">Skala 1-5</span>
             </div>
 
-            <div className="overflow-hidden rounded-[22px] border border-border/70 bg-background/85">
-              <table className="w-full min-w-[520px] text-sm">
-                <thead>
-                  <tr className="border-b border-border/70 bg-muted/20 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    <th className="py-3 pl-4 pr-2">Klub</th>
-                    <th className="px-2 py-3">Svar</th>
-                    <th className="px-2 py-3">Score</th>
-                    <th className="px-4 py-3 text-right">Detalje</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clubTableRows.map((row) => (
-                    <tr key={row.clubId} className="border-b border-border/60 last:border-b-0">
-                      <td className="py-3 pl-4 pr-2 font-medium text-foreground">{row.clubName}</td>
-                      <td className="px-2 py-3 text-muted-foreground">{row.count}</td>
-                      <td className="px-2 py-3">
-                        {row.suppressed ? (
-                          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
-                            Skjult (&lt;{SUPPRESSION_THRESHOLD})
-                          </span>
-                        ) : (
-                          <span className="font-semibold text-foreground">{row.avg?.toFixed(2)}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link href={`/dmu/clubs/${row.clubId}`} className="text-sm font-semibold text-primary transition hover:text-primary/80">
-                          Åbn
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
+              {clubComparisonRows.length > 0 ? (
+                <ClubComparisonChart data={clubComparisonRows} />
+              ) : (
+                <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                  For få svar til sammenligning i det valgte udsnit.
+                </div>
+              )}
             </div>
-          </div>
-        </article>
-      </section>
+          </article>
+
+        </section>
+      )}
 
       {/* ── Spørgsmålsfordeling ──────────────────────────────────────────── */}
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Spørgsmålsfordeling</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Søg og scan benchmarkspørgsmål hurtigt.</p>
           </div>
           <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-            {benchmarkRows.length} spørgsmål
+            {visibleBenchmarkCount} spørgsmål med data
           </span>
         </div>
 
@@ -543,28 +514,38 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
       </section>
 
       {/* ── Åbne svar ────────────────────────────────────────────────────── */}
-      {dmuImprovementQuestion ? (
+      {selectedTextQuestion ? (
         <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Åbne svar</p>
-              <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground">{dmuImprovementQuestion.title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Seneste signaler fra klubberne.</p>
+              {textQuestions.length === 1 ? (
+                <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground">{selectedTextQuestion.title}</h2>
+              ) : (
+                <div className="mt-2">
+                  <OpenTextQuestionSelect questions={textQuestions} selectedQuestionId={selectedTextQuestion.id} />
+                </div>
+              )}
+              <p className="mt-2 text-sm text-muted-foreground">Fritekstbesvarelser i det valgte udsnit.</p>
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-                {improvementResponses.length} svar
+                {textQuestionCounts.get(selectedTextQuestion.id) ?? 0} svar
               </span>
-              <TextResponsesModal questionTitle={dmuImprovementQuestion.title} responses={improvementResponses} triggerLabel="Se alle" />
+              <TextResponsesModal
+                questionTitle={selectedTextQuestion.title}
+                responses={textResponses.map((answer) => ({ text: answer.textValue ?? "" }))}
+                triggerLabel="Se alle"
+                showMetadata={false}
+              />
             </div>
           </div>
 
-          {improvementResponses.length > 0 ? (
+          {textResponses.length > 0 ? (
             <div className="mt-5 grid gap-3 lg:grid-cols-3">
-              {improvementResponses.slice(0, 3).map((response, index) => (
-                <article key={`${response.submittedAt}-${index}`} className="rounded-[22px] border border-border/70 bg-background/85 p-4">
-                  <p className="text-sm leading-6 text-foreground">{response.text}</p>
-                  <p className="mt-3 text-xs font-medium text-muted-foreground">{response.clubName}</p>
+              {textResponses.slice(0, 3).map((response, index) => (
+                <article key={`${response.textValue}-${index}`} className="rounded-[22px] border border-border/70 bg-background/85 p-4">
+                  <p className="text-sm leading-6 text-foreground">{response.textValue}</p>
                 </article>
               ))}
             </div>

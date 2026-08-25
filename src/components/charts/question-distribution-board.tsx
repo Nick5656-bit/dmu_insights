@@ -20,23 +20,23 @@ type QuestionDistributionBoardProps = {
 export function QuestionDistributionBoard({ rows, suppressionThreshold }: QuestionDistributionBoardProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("ALLE");
-  const [showOnlyWithData, setShowOnlyWithData] = useState(false);
+
+  const rowsWithData = useMemo(() => rows.filter((row) => !row.suppressed), [rows]);
 
   const categories = useMemo(() => {
-    return ["ALLE", ...Array.from(new Set(rows.map((row) => row.category))).sort((a, b) => a.localeCompare(b, "da"))];
-  }, [rows]);
+    return ["ALLE", ...Array.from(new Set(rowsWithData.map((row) => row.category))).sort((a, b) => a.localeCompare(b, "da"))];
+  }, [rowsWithData]);
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    return rows.filter((row) => {
+    return rowsWithData.filter((row) => {
       const matchesCategory = selectedCategory === "ALLE" || row.category === selectedCategory;
       const matchesSearch = normalizedSearch.length === 0 || row.questionTitle.toLowerCase().includes(normalizedSearch);
-      const matchesDataMode = !showOnlyWithData || !row.suppressed;
 
-      return matchesCategory && matchesSearch && matchesDataMode;
+      return matchesCategory && matchesSearch;
     });
-  }, [rows, searchTerm, selectedCategory, showOnlyWithData]);
+  }, [rowsWithData, searchTerm, selectedCategory]);
 
   const groupedRows = useMemo(() => {
     const map = new Map<string, BenchmarkRow[]>();
@@ -56,12 +56,10 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
     });
   }, [filteredRows]);
 
-  const rowsWithData = rows.filter((row) => !row.suppressed).length;
-
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border bg-muted/20 p-4">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Søg spørgsmål</span>
             <input
@@ -88,28 +86,18 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
             </select>
           </label>
 
-          <div className="space-y-1">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Data</span>
-            <label className="flex h-10 items-center gap-2 rounded-md border bg-background px-3 text-sm">
-              <input
-                type="checkbox"
-                checked={showOnlyWithData}
-                onChange={(event) => setShowOnlyWithData(event.target.checked)}
-                className="h-4 w-4"
-              />
-              <span className="whitespace-nowrap">Vis kun spørgsmål med nok data</span>
-            </label>
-          </div>
         </div>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          Viser {filteredRows.length} af {rows.length} spørgsmål · {rowsWithData} har nok data til at vise score.
+          Viser {filteredRows.length} af {rowsWithData.length} spørgsmål med tilstrækkeligt datagrundlag.
         </p>
       </div>
 
       {groupedRows.length === 0 ? (
         <div className="rounded-2xl border border-dashed p-6 text-sm text-muted-foreground">
-          Ingen spørgsmål matcher de valgte filtre.
+          {rowsWithData.length === 0
+            ? `Ingen resultater at vise endnu. Resultater vises, når der er mindst ${suppressionThreshold} svar.`
+            : "Ingen spørgsmål matcher de valgte filtre."}
         </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-3">
