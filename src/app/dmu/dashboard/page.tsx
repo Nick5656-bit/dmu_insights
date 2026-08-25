@@ -506,7 +506,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Spørgsmålsfordeling</h2>
           </div>
           <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-            {benchmarkRows.length} spørgsmål · {visibleBenchmarkCount} med resultater
+            {visibleBenchmarkCount} spørgsmål med resultater
           </span>
         </div>
 

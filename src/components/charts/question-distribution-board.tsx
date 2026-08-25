@@ -24,19 +24,19 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
   const rowsWithData = useMemo(() => rows.filter((row) => !row.suppressed), [rows]);
 
   const categories = useMemo(() => {
-    return ["ALLE", ...Array.from(new Set(rows.map((row) => row.category))).sort((a, b) => a.localeCompare(b, "da"))];
-  }, [rows]);
+    return ["ALLE", ...Array.from(new Set(rowsWithData.map((row) => row.category))).sort((a, b) => a.localeCompare(b, "da"))];
+  }, [rowsWithData]);
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    return rows.filter((row) => {
+    return rowsWithData.filter((row) => {
       const matchesCategory = selectedCategory === "ALLE" || row.category === selectedCategory;
       const matchesSearch = normalizedSearch.length === 0 || row.questionTitle.toLowerCase().includes(normalizedSearch);
 
       return matchesCategory && matchesSearch;
     });
-  }, [rows, searchTerm, selectedCategory]);
+  }, [rowsWithData, searchTerm, selectedCategory]);
 
   const groupedRows = useMemo(() => {
     const map = new Map<string, BenchmarkRow[]>();
@@ -55,6 +55,15 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
       return leftCategory.localeCompare(rightCategory, "da");
     });
   }, [filteredRows]);
+
+  if (rowsWithData.length === 0) {
+    return (
+      <div className="rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-12 text-center text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">Ingen resultater endnu</p>
+        <p className="mt-1">Spørgsmål vises her, når de har mindst {suppressionThreshold} svar.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -89,13 +98,13 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
         </div>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          Viser {filteredRows.length} af {rows.length} spørgsmål · {rowsWithData.length} med resultater.
+          Viser {filteredRows.length} af {rowsWithData.length} spørgsmål med resultater.
         </p>
       </div>
 
       {groupedRows.length === 0 ? (
         <div className="rounded-2xl border border-dashed p-6 text-sm text-muted-foreground">
-          {rows.length === 0 ? "Der er endnu ikke oprettet benchmarkspørgsmål." : "Ingen spørgsmål matcher de valgte filtre."}
+          Ingen spørgsmål matcher de valgte filtre.
         </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-3">
