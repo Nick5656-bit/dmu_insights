@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DmuContentTabs } from "@/components/dmu-content-tabs";
 import { TemplateStructureEditor } from "./template-structure-editor";
 
 const createTemplateSchema = z.object({
@@ -380,13 +379,12 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
           <div className="text-white/75 [&_h1]:text-white [&_p]:text-white/75">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Spørgsmål & skabeloner</p>
             <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">Skabeloner</h1>
             <p className="mt-2 text-sm text-muted-foreground">Byg spørgeskemaer af standardspørgsmål.</p>
           </div>
-          <DmuContentTabs variant="dark" />
         </div>
       </section>
 

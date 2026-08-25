@@ -8,6 +8,10 @@ const dmuNavItems = [
     label: "Spørgsmål & skabeloner",
     activePrefixes: ["/dmu/questions", "/dmu/templates"],
     icon: "content" as const,
+    children: [
+      { href: "/dmu/questions", label: "Spørgsmål" },
+      { href: "/dmu/templates", label: "Skabeloner" },
+    ],
   },
   { href: "/dmu/send", label: "Udsend spørgeskema", icon: "deliveries" as const },
   {

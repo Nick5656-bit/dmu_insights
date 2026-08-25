@@ -8,6 +8,10 @@ type NavItem = {
   label: string;
   activePrefixes?: string[];
   icon?: NavIconName;
+  children?: Array<{
+    href: string;
+    label: string;
+  }>;
 };
 
 type AppShellProps = {
