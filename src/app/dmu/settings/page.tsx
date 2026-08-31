@@ -17,17 +17,23 @@ export default async function DmuSettingsPage() {
         <p className="mt-2 text-sm text-muted-foreground">Administrér klubadgange og se historikken for udsendelser.</p>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Link href="/dmu/settings/club-users" className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:bg-muted/20">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Klubbrugere</p>
           <h2 className="mt-3 text-2xl font-semibold">Adgang for klubber</h2>
           <p className="mt-2 text-sm text-muted-foreground">Opret, redigér og fjern klubadministratorer.</p>
           <p className="mt-6 text-sm font-semibold text-primary">{clubUsers} klubbrugere →</p>
         </Link>
+        <Link href="/dmu/settings/manual-send" className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:bg-muted/20">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Manuel udsendelse</p>
+          <h2 className="mt-3 text-2xl font-semibold">Send nu</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Udsend planlagte spørgeskemaer manuelt uden at vente på den daglige kørsel.</p>
+          <p className="mt-6 text-sm font-semibold text-primary">Åbn udsendelse →</p>
+        </Link>
         <Link href="/dmu/settings/sends" className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:bg-muted/20">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Tidligere udsendelser</p>
-          <h2 className="mt-3 text-2xl font-semibold">Historik og mails</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Følg planlagte og afsluttede udsendelser, samt deres mailhistorik.</p>
+          <h2 className="mt-3 text-2xl font-semibold">Historik</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Se hvilke mails der er sendt ud og svarprocenten pr. arrangement.</p>
           <p className="mt-6 text-sm font-semibold text-primary">{sentSurveys} sendte spørgeskemaer →</p>
         </Link>
         <Link href="/dmu/settings/privacy" className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:bg-muted/20">
