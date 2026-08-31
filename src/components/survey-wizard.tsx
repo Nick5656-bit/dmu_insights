@@ -72,9 +72,15 @@ export function SurveyWizard({ steps, submitAction }: Props) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function setAnswer(questionId: string, value: string) {
+  function setAnswer(questionId: string, value: string, autoAdvance = false) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
     setError(null);
+    if (autoAdvance && !isLast) {
+      setTimeout(() => {
+        setCurrentIndex((i) => i + 1);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }, 400);
+    }
   }
 
   function submit() {
@@ -191,7 +197,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
                           <button
                             key={value}
                             type="button"
-                            onClick={() => setAnswer(current.questionId, String(value))}
+                            onClick={() => setAnswer(current.questionId, String(value), true)}
                             className={[
                               "h-16 rounded-2xl border-2 text-xl font-bold transition-all active:scale-95",
                               selected
@@ -220,7 +226,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
                         <button
                           key={option.value}
                           type="button"
-                          onClick={() => setAnswer(current.questionId, option.value)}
+                          onClick={() => setAnswer(current.questionId, option.value, true)}
                           className={[
                             "w-full rounded-2xl border-2 px-4 py-4 text-left text-sm font-medium transition-all active:scale-[0.98]",
                             selected
