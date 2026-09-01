@@ -3,6 +3,7 @@ import { processDueScheduledSends } from "@/lib/scheduled-sends";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DmuDeliveryTabs } from "@/components/dmu-delivery-tabs";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function ManualSendPage() {
   await requireRole("DMU_ADMIN");
@@ -143,12 +144,12 @@ export default async function ManualSendPage() {
               </div>
 
               <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  className="rounded-2xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-primary/90"
+                <SubmitButton
+                  className="rounded-2xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-primary/90 disabled:translate-y-0 disabled:opacity-70"
+                  pendingText="Sender..."
                 >
                   Send valgte udsendelser
-                </button>
+                </SubmitButton>
               </div>
             </form>
           )}

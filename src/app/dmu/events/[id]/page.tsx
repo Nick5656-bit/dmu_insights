@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { processDueScheduledSends } from "@/lib/scheduled-sends";
+import { SubmitButton } from "@/components/submit-button";
 
 const participantSchema = z.object({
   email: z.string().trim().email(),
@@ -278,22 +279,22 @@ export default async function DmuEventDetailPage({
         <div className="flex items-center gap-2">
           {canSendNow && (
             <form action={sendNowAction}>
-              <button
-                type="submit"
-                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              <SubmitButton
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
+                pendingText="Sender..."
               >
                 Send nu
-              </button>
+              </SubmitButton>
             </form>
           )}
           {survey?.status === "SENT" && (
             <form action={closeSurveyAction}>
-              <button
-                type="submit"
-                className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+              <SubmitButton
+                className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-70"
+                pendingText="Lukker..."
               >
                 Luk spørgeskema
-              </button>
+              </SubmitButton>
             </form>
           )}
           <span
