@@ -443,19 +443,26 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
             ) : null}
           </div>
 
-          {!canShowOwnSegment ? null : clubImprovementResponses.length > 0 ? (
-            <div className="mt-5 grid gap-3 lg:grid-cols-2">
-              {clubImprovementResponses.slice(0, 2).map((response, index) => (
-                <article key={`${response.submittedAt}-${index}`} className="rounded-[22px] border border-border/70 bg-background/85 p-4">
-                  <p className="text-sm leading-6 text-foreground">{response.text}</p>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-5 rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-              Ingen åbne svar i det valgte udsnit.
-            </div>
-          )}
+          <div className="mt-5">
+            {!canShowOwnSegment ? (
+              <div className="rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                <p className="font-medium text-foreground/70">Ingen resultater endnu</p>
+                <p className="mt-1">Åbne svar vises, når der er mindst {SUPPRESSION_THRESHOLD} svar.</p>
+              </div>
+            ) : clubImprovementResponses.length > 0 ? (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {clubImprovementResponses.slice(0, 2).map((response, index) => (
+                  <article key={`${response.submittedAt}-${index}`} className="rounded-[22px] border border-border/70 bg-background/85 p-4">
+                    <p className="text-sm leading-6 text-foreground">{response.text}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                Ingen åbne svar i det valgte udsnit.
+              </div>
+            )}
+          </div>
         </section>
       ) : null}
     </div>

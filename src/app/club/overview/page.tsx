@@ -130,41 +130,34 @@ export default async function ClubOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-[1.9rem] border bg-[linear-gradient(135deg,rgba(16,36,77,0.98),rgba(33,64,122,0.92))] p-6 text-primary-foreground shadow-[0_30px_60px_-42px_rgba(21,37,77,0.8)]">
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <section className="overflow-hidden rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-foreground/70">Klubadministrator</p>
-            <h2 className="mt-3 text-4xl font-bold tracking-[-0.05em]">Overblik</h2>
-            <p className="mt-3 max-w-2xl text-sm text-primary-foreground/75">Klubbens status og seneste aktivitet.</p>
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link href="/club/events" className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-primary transition hover:bg-white/92">
-                Arrangementer
-              </Link>
-              <Link href="/club/dashboard" className="rounded-full border border-white/16 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/8">
-                Indsigter
-              </Link>
-            </div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">Klubadministrator</p>
+            <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight text-white">Overblik</h1>
+            <p className="mt-2 max-w-2xl text-sm text-white/70">Klubbens status og seneste aktivitet.</p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <article className="rounded-[1.5rem] border border-white/10 bg-white/8 p-4 backdrop-blur">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-foreground/66">Medlemmer</p>
-              <p className="mt-3 text-4xl font-bold">{members}</p>
+            <article className="rounded-[22px] border border-white/12 bg-white/10 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">Medlemmer</p>
+              <p className="mt-3 font-heading text-3xl font-semibold text-white">{members}</p>
             </article>
-            <article className="rounded-[1.5rem] border border-white/10 bg-white/8 p-4 backdrop-blur">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-foreground/66">Dækning</p>
-              <p className="mt-3 text-4xl font-bold">{responseCoverage.toFixed(0)}%</p>
+            <article className="rounded-[22px] border border-white/12 bg-white/10 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">Svardækning</p>
+              <p className="mt-3 font-heading text-3xl font-semibold text-white">{responseCoverage.toFixed(0)}%</p>
             </article>
           </div>
         </div>
       </section>
 
+      {/* ── Statistik-kort ───────────────────────────────────────────────── */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card) => (
-          <article key={card.label} className="rounded-xl border bg-background p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{card.label}</p>
-            <p className="mt-3 text-3xl font-bold">{card.value}</p>
+          <article key={card.label} className="rounded-[24px] border border-border/70 bg-card p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">{card.label}</p>
+            <p className="mt-3 font-heading text-3xl font-semibold tracking-tight text-foreground">{card.value}</p>
           </article>
         ))}
       </section>
