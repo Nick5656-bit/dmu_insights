@@ -74,21 +74,17 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
       status: true,
       sentAt: true,
       createdAt: true,
-      _count: {
-        select: {
-          responses: true,
-        },
-      },
+      _count: { select: { responses: true } },
     },
     orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
   });
 
-  const selectedSurvey = availableSurveys.find((survey) => survey.id === params.surveyInstanceId);
+  const selectedSurvey = availableSurveys.find((s) => s.id === params.surveyInstanceId);
   const selectedSurveyId = selectedSurvey?.id;
 
-  const ageGroupFilter = ageGroupOptions.some((option) => option.value === params.ageGroup) ? (params.ageGroup as AgeGroup) : undefined;
-  const raceClassFilter = raceClassOptions.some((option) => option.value === params.raceClass) ? (params.raceClass as RaceClass) : undefined;
-  const memberRoleFilter = memberRoleOptions.some((option) => option.value === params.memberRole) ? (params.memberRole as MemberRole) : undefined;
+  const ageGroupFilter = ageGroupOptions.some((o) => o.value === params.ageGroup) ? (params.ageGroup as AgeGroup) : undefined;
+  const raceClassFilter = raceClassOptions.some((o) => o.value === params.raceClass) ? (params.raceClass as RaceClass) : undefined;
+  const memberRoleFilter = memberRoleOptions.some((o) => o.value === params.memberRole) ? (params.memberRole as MemberRole) : undefined;
 
   const ownResponseWhere = {
     clubId: session.clubId,
@@ -110,11 +106,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     prisma.surveyResponse.count({ where: ownResponseWhere }),
     prisma.surveyResponse.count({ where: benchmarkResponseWhere }),
     prisma.question.findMany({
-      where: {
-        scope: "DMU_STANDARD",
-        benchmarkKey: { not: null },
-        questionType: "SCALE_1_5",
-      },
+      where: { scope: "DMU_STANDARD", benchmarkKey: { not: null }, questionType: "SCALE_1_5" },
       orderBy: { createdAt: "asc" },
     }),
   ]);
@@ -136,29 +128,17 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
   for (const question of benchmarkQuestions) {
     const [ownAgg, benchmarkAgg, ownNumericAnswers] = await Promise.all([
       prisma.surveyAnswer.aggregate({
-        where: {
-          questionId: question.id,
-          numericValue: { not: null },
-          surveyResponse: ownResponseWhere,
-        },
+        where: { questionId: question.id, numericValue: { not: null }, surveyResponse: ownResponseWhere },
         _count: { numericValue: true },
         _avg: { numericValue: true },
       }),
       prisma.surveyAnswer.aggregate({
-        where: {
-          questionId: question.id,
-          numericValue: { not: null },
-          surveyResponse: benchmarkResponseWhere,
-        },
+        where: { questionId: question.id, numericValue: { not: null }, surveyResponse: benchmarkResponseWhere },
         _count: { numericValue: true },
         _avg: { numericValue: true },
       }),
       prisma.surveyAnswer.findMany({
-        where: {
-          questionId: question.id,
-          numericValue: { not: null },
-          surveyResponse: ownResponseWhere,
-        },
+        where: { questionId: question.id, numericValue: { not: null }, surveyResponse: ownResponseWhere },
         select: { numericValue: true },
       }),
     ]);
@@ -166,9 +146,9 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     const ownCount = ownNumericAnswers.length;
     const rawCategory = question.benchmarkKey ? question.benchmarkKey.split("_")[0] : "GENEREL";
     const category = formatBenchmarkCategory(rawCategory);
-    const distribution = [1, 2, 3, 4, 5].map((scaleValue) => ({
-      label: String(scaleValue),
-      value: ownNumericAnswers.filter((answer) => answer.numericValue === scaleValue).length,
+    const distribution = [1, 2, 3, 4, 5].map((v) => ({
+      label: String(v),
+      value: ownNumericAnswers.filter((a) => a.numericValue === v).length,
     }));
 
     distributionRows.push({
@@ -181,31 +161,19 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     });
 
     if (ownAgg._avg.numericValue && benchmarkAgg._avg.numericValue) {
-      const current = categoryBenchmarks.get(rawCategory) ?? {
-        ownWeightedSum: 0,
-        ownCount: 0,
-        benchmarkWeightedSum: 0,
-        benchmarkCount: 0,
-      };
-
-      const ownCountForQuestion = ownAgg._count.numericValue;
-      const benchmarkCountForQuestion = benchmarkAgg._count.numericValue;
-
+      const current = categoryBenchmarks.get(rawCategory) ?? { ownWeightedSum: 0, ownCount: 0, benchmarkWeightedSum: 0, benchmarkCount: 0 };
       categoryBenchmarks.set(rawCategory, {
-        ownWeightedSum: current.ownWeightedSum + Number(ownAgg._avg.numericValue) * ownCountForQuestion,
-        ownCount: current.ownCount + ownCountForQuestion,
-        benchmarkWeightedSum: current.benchmarkWeightedSum + Number(benchmarkAgg._avg.numericValue) * benchmarkCountForQuestion,
-        benchmarkCount: current.benchmarkCount + benchmarkCountForQuestion,
+        ownWeightedSum: current.ownWeightedSum + Number(ownAgg._avg.numericValue) * ownAgg._count.numericValue,
+        ownCount: current.ownCount + ownAgg._count.numericValue,
+        benchmarkWeightedSum: current.benchmarkWeightedSum + Number(benchmarkAgg._avg.numericValue) * benchmarkAgg._count.numericValue,
+        benchmarkCount: current.benchmarkCount + benchmarkAgg._count.numericValue,
       });
     }
   }
 
   if (canShowOwnSegment && canShowBenchmarkSegment) {
     for (const [rawCategory, values] of Array.from(categoryBenchmarks.entries()).sort(([a], [b]) => a.localeCompare(b, "da"))) {
-      if (values.ownCount === 0 || values.benchmarkCount === 0) {
-        continue;
-      }
-
+      if (values.ownCount === 0 || values.benchmarkCount === 0) continue;
       benchmarkRows.push({
         label: formatBenchmarkCategory(rawCategory),
         own: Number((values.ownWeightedSum / values.ownCount).toFixed(2)),
@@ -214,16 +182,16 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     }
   }
 
-  const overallOwn = benchmarkRows.length > 0 ? benchmarkRows.reduce((sum, row) => sum + row.own, 0) / benchmarkRows.length : null;
-  const overallBenchmark = benchmarkRows.length > 0 ? benchmarkRows.reduce((sum, row) => sum + row.benchmark, 0) / benchmarkRows.length : null;
+  const overallOwn = benchmarkRows.length > 0 ? benchmarkRows.reduce((s, r) => s + r.own, 0) / benchmarkRows.length : null;
+  const overallBenchmark = benchmarkRows.length > 0 ? benchmarkRows.reduce((s, r) => s + r.benchmark, 0) / benchmarkRows.length : null;
   const delta = overallOwn && overallBenchmark ? overallOwn - overallBenchmark : null;
   const responseCoverage = members > 0 ? Math.min((ownResponsesCount / members) * 100, 100) : 0;
 
   const activeFilters = [
     selectedSurvey ? `Spørgeskema: ${selectedSurvey.name}` : undefined,
-    ageGroupFilter ? `Alder: ${ageGroupOptions.find((option) => option.value === ageGroupFilter)?.label}` : undefined,
-    raceClassFilter ? `Køreklasse: ${raceClassOptions.find((option) => option.value === raceClassFilter)?.label}` : undefined,
-    memberRoleFilter ? `Rolle: ${memberRoleOptions.find((option) => option.value === memberRoleFilter)?.label}` : undefined,
+    ageGroupFilter ? `Alder: ${ageGroupOptions.find((o) => o.value === ageGroupFilter)?.label}` : undefined,
+    raceClassFilter ? `Køreklasse: ${raceClassOptions.find((o) => o.value === raceClassFilter)?.label}` : undefined,
+    memberRoleFilter ? `Rolle: ${memberRoleOptions.find((o) => o.value === memberRoleFilter)?.label}` : undefined,
   ].filter(Boolean) as string[];
 
   const dmuImprovementQuestion = await prisma.question.findFirst({
@@ -233,19 +201,15 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
   const clubImprovementAnswers =
     dmuImprovementQuestion && canShowOwnSegment
       ? await prisma.surveyAnswer.findMany({
-          where: {
-            questionId: dmuImprovementQuestion.id,
-            textValue: { not: null },
-            surveyResponse: ownResponseWhere,
-          },
+          where: { questionId: dmuImprovementQuestion.id, textValue: { not: null }, surveyResponse: ownResponseWhere },
           include: { surveyResponse: { select: { submittedAt: true } } },
           orderBy: { surveyResponse: { submittedAt: "desc" } },
         })
       : [];
 
-  const clubImprovementResponses = clubImprovementAnswers.map((answer) => ({
-    text: answer.textValue!,
-    submittedAt: answer.surveyResponse.submittedAt.toISOString(),
+  const clubImprovementResponses = clubImprovementAnswers.map((a) => ({
+    text: a.textValue!,
+    submittedAt: a.surveyResponse.submittedAt.toISOString(),
   }));
 
   const summaryCards = [
@@ -255,7 +219,6 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     { label: "Spørgeskemaer", value: surveys, hint: "Alle oprettede" },
   ];
 
-  const scopePills = activeFilters.length > 0 ? activeFilters : ["Hele klubben"];
   const canRenderBenchmark = canShowOwnSegment && canShowBenchmarkSegment && benchmarkRows.length > 0;
   const exportParams = new URLSearchParams();
   if (selectedSurveyId) exportParams.set("surveyInstanceId", selectedSurveyId);
@@ -266,101 +229,105 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
   return (
     <div className="space-y-6">
+      {/* ── Filterpanel ─────────────────────────────────────────────────── */}
       <section className="overflow-visible rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="max-w-3xl space-y-4">
-            <span className="inline-flex w-fit items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white/90">
+
+        {/* Topbar: titel + kompakte handlingsknapper */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white/90">
               Indsigter
             </span>
-            <div className="space-y-2 text-white/75 [&_h1]:text-white [&_p]:text-white/75">
-              <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground md:text-4xl">Klubbens dashboard</h1>
-              <p className="max-w-2xl text-sm text-muted-foreground">Se jeres niveau, benchmark og åbne svar uden at skulle hoppe mellem flere sider.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {scopePills.map((pill) => (
-                <span
-                  key={pill}
-                  className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85"
-                >
-                  {pill}
-                </span>
-              ))}
-            </div>
+            <h1 className="font-heading text-2xl font-semibold tracking-tight text-white">Klubbens dashboard</h1>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 xl:w-[360px]">
+          {/* Kompakte handlingsknapper */}
+          <div className="flex flex-wrap items-center gap-2">
             {dashboardLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/16"
+                className="rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/18"
               >
                 {link.label}
               </Link>
             ))}
             <a
               href={exportHref}
-              className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-white/16"
+              className="rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/18"
             >
               Eksportér resultater
             </a>
           </div>
         </div>
 
-        <form className="mt-6 grid gap-3 rounded-[24px] border border-white/12 bg-white/8 p-4 backdrop-blur-sm md:grid-cols-5" method="get">
-          <select name="surveyInstanceId" defaultValue={selectedSurveyId ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground">
-            <option value="">Alle spørgeskemaer</option>
-            {availableSurveys.map((survey) => (
-              <option key={survey.id} value={survey.id}>
-                {survey.name} ({survey._count.responses} svar)
-              </option>
+        {/* Aktive filter-pills – kun synlige når filtre er valgt */}
+        {activeFilters.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {activeFilters.map((pill) => (
+              <span key={pill} className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85">
+                {pill}
+              </span>
             ))}
-          </select>
+          </div>
+        )}
 
-          <select name="ageGroup" defaultValue={ageGroupFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground">
-            <option value="">Alle aldre</option>
-            {ageGroupOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        {/* Filterrækken */}
+        <form className="mt-4 grid gap-2 rounded-[24px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm md:grid-cols-6" method="get">
+          {/* Spørgeskema */}
+          <div className="relative md:col-span-2">
+            <select name="surveyInstanceId" defaultValue={selectedSurveyId ?? ""}
+              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
+              <option value="">Alle spørgeskemaer</option>
+              {availableSurveys.map((s) => (
+                <option key={s.id} value={s.id}>{s.name} ({s._count.responses} svar)</option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
 
-          <select name="raceClass" defaultValue={raceClassFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground">
-            <option value="">Alle klasser</option>
-            {raceClassOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {/* Alder */}
+          <div className="relative md:col-span-1">
+            <select name="ageGroup" defaultValue={ageGroupFilter ?? ""}
+              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
+              <option value="">Alle aldre</option>
+              {ageGroupOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
 
-          <select name="memberRole" defaultValue={memberRoleFilter ?? ""} className="h-11 rounded-2xl border border-white/12 bg-white/96 px-3 text-sm text-foreground">
-            <option value="">Alle roller</option>
-            {memberRoleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          {/* Klasse */}
+          <div className="relative md:col-span-1">
+            <select name="raceClass" defaultValue={raceClassFilter ?? ""}
+              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
+              <option value="">Alle klasser</option>
+              {raceClassOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
 
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              className="h-11 flex-1 rounded-2xl bg-white px-4 text-sm font-semibold text-primary shadow-sm transition hover:-translate-y-0.5 hover:bg-white/92"
-            >
+          {/* Rolle */}
+          <div className="relative md:col-span-1">
+            <select name="memberRole" defaultValue={memberRoleFilter ?? ""}
+              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
+              <option value="">Alle roller</option>
+              {memberRoleOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
+
+          <div className="flex gap-2 md:col-span-1">
+            <button type="submit" className="h-11 flex-1 rounded-2xl bg-white px-4 text-sm font-semibold text-primary shadow-sm transition hover:-translate-y-0.5 hover:bg-white/92">
               Opdater
             </button>
-            <Link
-              href="/club/dashboard"
-              className="flex h-11 items-center justify-center rounded-2xl border border-white/15 px-4 text-sm font-medium text-white/85 transition hover:bg-white/10"
-            >
+            <Link href="/club/dashboard" className="flex h-11 items-center justify-center rounded-2xl border border-white/15 px-4 text-sm font-medium text-white/85 transition hover:bg-white/10">
               Nulstil
             </Link>
           </div>
         </form>
       </section>
 
+      {/* ── Statistik-kort ───────────────────────────────────────────────── */}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((card) => (
           <article key={card.label} className="rounded-[24px] border border-border/70 bg-card p-5 shadow-sm">
@@ -377,6 +344,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
         </section>
       ) : null}
 
+      {/* ── Benchmark + sidepanel ────────────────────────────────────────── */}
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
         <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -388,7 +356,6 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
               {benchmarkRows.length} kategorier
             </span>
           </div>
-
           <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
             {canRenderBenchmark ? (
               <BenchmarkBarChart data={benchmarkRows} />
@@ -402,29 +369,27 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
         <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <div className="space-y-3">
-            <div className="rounded-[22px] border border-primary/15 bg-primary/5 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary/80">Samlet niveau</p>
+            <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Samlet niveau</p>
               <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
-                {overallOwn !== null ? overallOwn.toFixed(2) : "-"}
+                {overallOwn !== null ? overallOwn.toFixed(2) : "–"}
               </p>
             </div>
-
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <div className="rounded-[22px] border border-border/70 bg-background/85 p-4">
+              <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Benchmark</p>
                 <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
-                  {overallBenchmark !== null ? overallBenchmark.toFixed(2) : "-"}
+                  {overallBenchmark !== null ? overallBenchmark.toFixed(2) : "–"}
                 </p>
               </div>
-              <div className="rounded-[22px] border border-border/70 bg-background/85 p-4">
+              <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Forskel</p>
                 <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
-                  {delta !== null ? `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}` : "-"}
+                  {delta !== null ? `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}` : "–"}
                 </p>
               </div>
             </div>
-
-            <div className="rounded-[22px] border border-border/70 bg-background/85 p-4">
+            <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Svargrundlag</p>
                 <span className="text-sm font-semibold text-foreground">{benchmarkResponsesCount}</span>
@@ -441,6 +406,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
         </article>
       </section>
 
+      {/* ── Spørgsmålsfordeling ──────────────────────────────────────────── */}
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -451,12 +417,12 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
             {distributionRows.length} spørgsmål
           </span>
         </div>
-
         <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
           <QuestionDistributionBoard rows={distributionRows} suppressionThreshold={SUPPRESSION_THRESHOLD} />
         </div>
       </section>
 
+      {/* ── Åbne svar ────────────────────────────────────────────────────── */}
       {dmuImprovementQuestion ? (
         <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
