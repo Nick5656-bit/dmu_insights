@@ -29,7 +29,7 @@ export function AppShell({ areaLabel, userName, navItems, children }: AppShellPr
       <div className="mx-auto flex w-full max-w-[1500px] gap-4 px-3 py-3 md:px-4 md:py-4">
         <aside className="sticky top-4 hidden h-[calc(100vh-2rem)] w-[296px] shrink-0 flex-col rounded-[2rem] border border-sidebar-border bg-sidebar p-4 shadow-[0_30px_60px_-42px_rgba(21,37,77,0.45)] backdrop-blur lg:flex">
           <div className="rounded-[1.6rem] bg-[linear-gradient(160deg,rgba(16,36,77,0.98),rgba(33,64,122,0.92))] p-4 text-primary-foreground">
-            <DmuLogo compact size="sm" surface="card" />
+            <DmuLogo compact size="sm" surface="card" variant="insights" />
             <div className="mt-4 space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary-foreground/70">{areaLabel}</p>
               <p className="text-xl font-bold leading-none">{firstName}</p>

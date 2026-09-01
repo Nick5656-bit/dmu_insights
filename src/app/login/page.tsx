@@ -52,7 +52,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <div className="mx-auto w-full max-w-[32rem]">
 
             {/* Logo øverst i login-panelet */}
-            <DmuLogo />
+            <DmuLogo variant="insights" />
 
             <div className="mt-10">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">

@@ -1,19 +1,31 @@
 import Image from "next/image";
 import dmuLogo from "@/../public/dmu-logo.png";
+import dmuInsightsLogo from "@/../public/dmu-insights-logo.png";
 
 type DmuLogoProps = {
   compact?: boolean;
   surface?: "plain" | "card";
   size?: "default" | "sm";
+  /** "insights" = DMU Insights logo (admin platform), "classic" = standard DMU logo (surveys, public pages) */
+  variant?: "insights" | "classic";
 };
 
-export function DmuLogo({ compact = false, surface = "plain", size = "default" }: DmuLogoProps) {
-  const imageWidth = compact ? (size === "sm" ? 104 : 132) : 180;
-  const imageHeight = compact ? (size === "sm" ? 31 : 39) : 52;
+export function DmuLogo({ compact = false, surface = "plain", size = "default", variant = "classic" }: DmuLogoProps) {
+  const isInsights = variant === "insights";
+
+  // Insights logo has wider aspect ratio (~3.2:1), classic is ~3.4:1 – keep similar heights
+  const imageWidth = isInsights
+    ? compact ? (size === "sm" ? 140 : 168) : 220
+    : compact ? (size === "sm" ? 104 : 132) : 180;
+
+  const imageHeight = isInsights
+    ? compact ? (size === "sm" ? 44 : 52) : 68
+    : compact ? (size === "sm" ? 31 : 39) : 52;
+
   const image = (
     <Image
-      src={dmuLogo}
-      alt="Danmarks Motor Union"
+      src={isInsights ? dmuInsightsLogo : dmuLogo}
+      alt={isInsights ? "DMU Insights" : "Danmarks Motor Union"}
       width={imageWidth}
       height={imageHeight}
       className="h-auto w-auto"
@@ -34,7 +46,7 @@ export function DmuLogo({ compact = false, surface = "plain", size = "default" }
       ) : (
         image
       )}
-      {!compact ? (
+      {!compact && !isInsights ? (
         <span className="rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           Medlemsfeedback
         </span>
