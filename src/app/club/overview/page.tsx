@@ -102,7 +102,7 @@ export default async function ClubOverviewPage() {
   const summaryCards = [
     { label: "Spørgeskemaer", value: surveys },
     { label: "Besvarelser", value: responses },
-    { label: "Udsendelser", value: pendingSendCount },
+    { label: "Planlagte sends", value: pendingSendCount },
     { label: "Klarmelding", value: missingReadyCount },
   ];
 
