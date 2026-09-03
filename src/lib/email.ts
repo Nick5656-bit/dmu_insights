@@ -104,7 +104,7 @@ export async function sendSurveyInvitation({
                 <tr>
                   <td style="background:#f4f4f5;border-radius:10px;padding:16px 20px;">
                     <p style="margin:0;color:#71717a;font-size:13px;line-height:1.6;">
-                      🔒 <strong>Dine svar behandles fortroligt.</strong> Invitationsoplysninger og svar behandles adskilt, og resultater vises kun samlet. Linket er personligt og kan kun bruges én gang.
+                      <strong>Dine svar behandles fortroligt.</strong> Invitationsoplysninger og svar behandles adskilt, og resultater vises kun samlet. Linket er personligt og kan kun bruges én gang.
                     </p>
                   </td>
                 </tr>
