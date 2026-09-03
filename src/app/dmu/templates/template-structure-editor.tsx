@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useActionState } from "react";
+import { SubmitButton } from "@/components/submit-button";
 
 type QuestionMeta = {
   id: string;
@@ -25,12 +26,19 @@ type StructureQuestion = {
 
 type StructureItem = StructureHeading | StructureQuestion;
 
+type SaveState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+const initialSaveState: SaveState = { status: "idle", message: "" };
+
 type Props = {
   templateId: string;
   initialItems: StructureItem[];
   questionPool: QuestionMeta[];
   questionMeta: QuestionMeta[];
-  saveAction: (formData: FormData) => Promise<void>;
+  saveAction: (previousState: SaveState, formData: FormData) => Promise<SaveState>;
 };
 
 function moveItem(items: StructureItem[], fromId: string, toId: string): StructureItem[] {
@@ -61,6 +69,15 @@ export function TemplateStructureEditor({ templateId, initialItems, questionPool
   const [headingTitle, setHeadingTitle] = useState("");
   const [selectedQuestionId, setSelectedQuestionId] = useState("");
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [saveState, saveFormAction] = useActionState(saveAction, initialSaveState);
+  const serializedItems = useMemo(() => JSON.stringify({ version: 1, items }), [items]);
+  const [lastSavedItems, setLastSavedItems] = useState(serializedItems);
+
+  useEffect(() => {
+    if (saveState.status === "success") {
+      setLastSavedItems(serializedItems);
+    }
+  }, [saveState.status, serializedItems]);
 
   const questionById = useMemo(() => {
     const merged = [...questionPool, ...questionMeta];
@@ -288,12 +305,25 @@ export function TemplateStructureEditor({ templateId, initialItems, questionPool
         {items.length === 0 ? <p className="text-sm text-muted-foreground">Skabelonen er tom.</p> : null}
       </div>
 
-      <form action={saveAction} className="mt-4">
+      <form action={saveFormAction} className="mt-4 flex flex-wrap items-center gap-3">
         <input type="hidden" name="templateId" value={templateId} />
-        <input type="hidden" name="structureJson" value={JSON.stringify({ version: 1, items })} />
-        <button type="submit" className="rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground">
+        <input type="hidden" name="structureJson" value={serializedItems} />
+        <SubmitButton
+          pendingText="Gemmer..."
+          className="rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-70"
+        >
           Gem spørgsmål og afsnit
-        </button>
+        </SubmitButton>
+        {saveState.status === "error" ? (
+          <p role="alert" className="text-xs font-medium text-red-700">
+            {saveState.message}
+          </p>
+        ) : null}
+        {saveState.status === "success" && lastSavedItems === serializedItems ? (
+          <p role="status" className="text-xs font-medium text-emerald-700">
+            {saveState.message}
+          </p>
+        ) : null}
       </form>
     </div>
   );

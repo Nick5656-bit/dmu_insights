@@ -261,7 +261,10 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
     revalidatePath("/club/surveys");
   }
 
-  async function saveTemplateStructureAction(formData: FormData) {
+  async function saveTemplateStructureAction(
+    _previousState: { status: "idle" | "success" | "error"; message: string },
+    formData: FormData,
+  ) {
     "use server";
     await requireRole("DMU_ADMIN");
 
@@ -271,26 +274,22 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
     });
 
     if (!parsedPayload.success) {
-      return;
+      return { status: "error" as const, message: "Kunne ikke læse ændringerne. Prøv igen." };
     }
 
     let rawLayout: unknown;
     try {
       rawLayout = JSON.parse(parsedPayload.data.structureJson);
     } catch {
-      return;
+      return { status: "error" as const, message: "Kunne ikke læse ændringerne. Prøv igen." };
     }
     const parsedLayout = layoutJsonSchema.safeParse(rawLayout);
     if (!parsedLayout.success) {
-      return;
+      return { status: "error" as const, message: "Afsnit eller spørgsmål er ikke gyldigt udfyldt." };
     }
 
     const questionItems = parsedLayout.data.items.filter((item) => item.kind === "QUESTION");
     const uniqueQuestionIds = [...new Set(questionItems.map((item) => item.questionId))];
-    if (uniqueQuestionIds.length === 0) {
-      return;
-    }
-
     const [existingRows, questionsForTemplate] = await Promise.all([
       prisma.surveyTemplateQuestion.findMany({
         where: { surveyTemplateId: parsedPayload.data.templateId },
@@ -309,71 +308,77 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
     ]);
 
     if (questionsForTemplate.length !== uniqueQuestionIds.length) {
-      return;
+      return { status: "error" as const, message: "Et af spørgsmålene findes ikke længere. Genindlæs siden og prøv igen." };
     }
 
     const questionById = new Map(questionsForTemplate.map((question) => [question.id, question]));
     const existingByQuestionId = new Map(existingRows.map((row) => [row.questionId, row]));
 
     let sortOrder = 1;
-    await prisma.$transaction(async (transaction) => {
-      await transaction.surveyTemplateQuestion.deleteMany({
-        where: {
-          surveyTemplateId: parsedPayload.data.templateId,
-          questionId: { notIn: uniqueQuestionIds },
-        },
-      });
-
-      for (const item of parsedLayout.data.items) {
-        if (item.kind !== "QUESTION") {
-          continue;
-        }
-
-        const question = questionById.get(item.questionId);
-        if (!question) {
-          continue;
-        }
-
-        const nextRequired = item.required ?? true;
-        const nextIsCore = item.isCore === true && Boolean(question.benchmarkKey);
-        const existing = existingByQuestionId.get(item.questionId);
-
-        if (existing) {
-          await transaction.surveyTemplateQuestion.update({
-            where: { id: existing.id },
-            data: {
-              sortOrder,
-              required: nextRequired,
-              isCoreBenchmarkQuestion: nextIsCore,
-            },
-          });
-        } else {
-          await transaction.surveyTemplateQuestion.create({
-            data: {
-              surveyTemplateId: parsedPayload.data.templateId,
-              questionId: item.questionId,
-              sortOrder,
-              required: nextRequired,
-              isCoreBenchmarkQuestion: nextIsCore,
-            },
-          });
-        }
-
-        sortOrder += 1;
-      }
-
-      await transaction.surveyTemplate.update({
-        where: { id: parsedPayload.data.templateId },
-        data: {
-          layoutJson: {
-            version: 1,
-            items: parsedLayout.data.items,
+    try {
+      await prisma.$transaction(async (transaction) => {
+        await transaction.surveyTemplateQuestion.deleteMany({
+          where: {
+            surveyTemplateId: parsedPayload.data.templateId,
+            questionId: { notIn: uniqueQuestionIds },
           },
-        },
+        });
+
+        for (const item of parsedLayout.data.items) {
+          if (item.kind !== "QUESTION") {
+            continue;
+          }
+
+          const question = questionById.get(item.questionId);
+          if (!question) {
+            continue;
+          }
+
+          const nextRequired = item.required ?? true;
+          const nextIsCore = item.isCore === true && Boolean(question.benchmarkKey);
+          const existing = existingByQuestionId.get(item.questionId);
+
+          if (existing) {
+            await transaction.surveyTemplateQuestion.update({
+              where: { id: existing.id },
+              data: {
+                sortOrder,
+                required: nextRequired,
+                isCoreBenchmarkQuestion: nextIsCore,
+              },
+            });
+          } else {
+            await transaction.surveyTemplateQuestion.create({
+              data: {
+                surveyTemplateId: parsedPayload.data.templateId,
+                questionId: item.questionId,
+                sortOrder,
+                required: nextRequired,
+                isCoreBenchmarkQuestion: nextIsCore,
+              },
+            });
+          }
+
+          sortOrder += 1;
+        }
+
+        await transaction.surveyTemplate.update({
+          where: { id: parsedPayload.data.templateId },
+          data: {
+            layoutJson: {
+              version: 1,
+              items: parsedLayout.data.items,
+            },
+          },
+        });
       });
-    });
+    } catch (error) {
+      console.error("[templates] Kunne ikke gemme skabelonstruktur", error);
+      return { status: "error" as const, message: "Kunne ikke gemme ændringerne. Prøv igen." };
+    }
 
     revalidatePath("/dmu/templates");
+    return { status: "success" as const, message: "Gemt" };
   }
 
   return (

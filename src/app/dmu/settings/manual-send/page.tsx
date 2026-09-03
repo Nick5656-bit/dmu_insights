@@ -1,12 +1,18 @@
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { processDueScheduledSends } from "@/lib/scheduled-sends";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DmuDeliveryTabs } from "@/components/dmu-delivery-tabs";
 import { SubmitButton } from "@/components/submit-button";
 
-export default async function ManualSendPage() {
+export default async function ManualSendPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ success?: string; count?: string; error?: string }>;
+}) {
   await requireRole("DMU_ADMIN");
+  const feedback = await searchParams;
   const now = new Date();
 
   const eligibleDueWhere = {
@@ -42,14 +48,31 @@ export default async function ManualSendPage() {
       .map((v) => String(v))
       .filter(Boolean);
 
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0) {
+      redirect("/dmu/settings/manual-send?error=no_selection");
+    }
 
-    await processDueScheduledSends(selectedIds);
+    const result = await processDueScheduledSends(selectedIds);
 
     revalidatePath("/dmu/settings/manual-send");
     revalidatePath("/dmu/settings/sends");
     revalidatePath("/dmu/calendar");
+
+    if (result.processedCount === 0) {
+      redirect("/dmu/settings/manual-send?error=nothing_sent");
+    }
+
+    redirect(`/dmu/settings/manual-send?success=sent&count=${result.processedCount}`);
   }
+
+  const feedbackMessage =
+    feedback.success === "sent"
+      ? `Udsendelse igangsat for ${Number(feedback.count ?? 0)} ${Number(feedback.count ?? 0) === 1 ? "spørgeskema" : "spørgeskemaer"}. Invitationerne sendes nu.`
+      : feedback.error === "no_selection"
+        ? "Vælg mindst én udsendelse først."
+        : feedback.error === "nothing_sent"
+          ? "Ingen udsendelser blev sendt. De kan være sendt eller behandlet i mellemtiden."
+          : null;
 
   return (
     <div className="space-y-6">
@@ -90,6 +113,17 @@ export default async function ManualSendPage() {
           </div>
         </div>
       </section>
+
+      {feedbackMessage ? (
+        <div
+          role={feedback.error ? "alert" : "status"}
+          className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+            feedback.error ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {feedbackMessage}
+        </div>
+      ) : null}
 
       {/* Klar nu */}
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
