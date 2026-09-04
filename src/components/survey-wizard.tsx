@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { DmuLogo } from "@/components/dmu-logo";
+import { LoadingSpinner } from "@/components/submit-button";
 import { roleNeedsMotocrossClass } from "@/lib/survey-segments";
 
 type SegmentKey = "respondentAgeGroup" | "respondentRole" | "motocrossClass";
@@ -405,7 +406,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
               disabled={isPending}
               className="flex-1 rounded-2xl bg-primary px-5 py-3.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
             >
-              {isPending ? "Sender..." : "Indsend svar ✓"}
+              {isPending ? <span className="inline-flex items-center gap-2"><LoadingSpinner />Sender...</span> : "Indsend svar ✓"}
             </button>
           )}
         </div>

@@ -6,6 +6,7 @@ import { DmuDeliveryTabs } from "@/components/dmu-delivery-tabs";
 import { processDueScheduledSends } from "@/lib/scheduled-sends";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SubmitButton } from "@/components/submit-button";
 
 type DmuOutboxPageProps = {
   searchParams: Promise<{
@@ -233,9 +234,9 @@ export default async function DmuOutboxPage({ searchParams }: DmuOutboxPageProps
                 ))}
               </div>
 
-              <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+              <SubmitButton pendingText="Sender..." className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
                 Behandl valgte udsendelser
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>

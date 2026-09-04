@@ -6,6 +6,7 @@ import { SurveyStatus, SurveyType } from "@prisma/client";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SubmitButton } from "@/components/submit-button";
 
 const createFromTemplateSchema = z.object({
   templateId: z.string().min(1),
@@ -399,13 +400,10 @@ export default async function ClubSurveysPage({
               <input id="name" name="name" className="h-11 w-full rounded-2xl border border-border/70 bg-background px-3 text-sm" placeholder="Valgfrit navn" />
             </div>
 
-            <button
-              type="submit"
-              className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-primary/90"
-            >
+            <SubmitButton pendingText="Opretter..." className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-primary/90">
               <Sparkles className="h-4 w-4" />
               Opret fra skabelon
-            </button>
+            </SubmitButton>
           </form>
         </section>
 
@@ -444,13 +442,10 @@ export default async function ClubSurveysPage({
               </select>
             </div>
 
-            <button
-              type="submit"
-              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-border/70 px-5 text-sm font-semibold text-foreground transition hover:bg-muted/40"
-            >
+            <SubmitButton pendingText="Opretter..." className="inline-flex h-11 items-center gap-2 rounded-2xl border border-border/70 px-5 text-sm font-semibold text-foreground transition hover:bg-muted/40">
               <Plus className="h-4 w-4" />
               Opret lokalt
-            </button>
+            </SubmitButton>
           </form>
         </section>
       </section>

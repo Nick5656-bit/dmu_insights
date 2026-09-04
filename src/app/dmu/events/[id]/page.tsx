@@ -422,12 +422,9 @@ export default async function DmuEventDetailPage({
                 placeholder={"Mette Jensen\tmette@example.dk\nrasmus@example.dk"}
                 className="mt-4 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
-              <button
-                type="submit"
-                className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-              >
+              <SubmitButton pendingText="Tilføjer..." className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
                 Tilføj deltagere
-              </button>
+              </SubmitButton>
             </form>
 
             <form action={addSingleParticipantAction} className="rounded-2xl border bg-background p-5">
@@ -446,12 +443,9 @@ export default async function DmuEventDetailPage({
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
-              <button
-                type="submit"
-                className="mt-4 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
-              >
+              <SubmitButton pendingText="Gemmer..." className="mt-4 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">
                 Gem deltager
-              </button>
+              </SubmitButton>
             </form>
           </div>
         )}
@@ -479,12 +473,9 @@ export default async function DmuEventDetailPage({
                       {!isLocked ? (
                         <form action={removeParticipantAction}>
                           <input type="hidden" name="participantId" value={participant.id} />
-                          <button
-                            type="submit"
-                            className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
-                          >
+                          <SubmitButton pendingText="Fjerner..." className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
                             Fjern
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : (
                         <span className="text-xs text-muted-foreground">Låst</span>

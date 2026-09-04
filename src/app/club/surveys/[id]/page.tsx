@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createSurveyToken, hashSurveyToken } from "@/lib/survey-token";
+import { SubmitButton } from "@/components/submit-button";
 
 const createCustomQuestionSchema = z.object({
   title: z.string().trim().min(3),
@@ -738,9 +739,9 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
                 <form action={updateReadyStateAction}>
                   <input type="hidden" name="surveyInstanceId" value={surveyInstance.id} />
                   <input type="hidden" name="intent" value={isClubReady ? "unready" : "ready"} />
-                  <button type="submit" className="rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">
+                  <SubmitButton pendingText={isClubReady ? "Fjerner..." : "Gemmer..."} className="rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted">
                     {isClubReady ? "Fjern klar" : "Marker klar"}
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </div>
@@ -751,13 +752,13 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
             <form action={sendSurveyNowAction}>
               <input type="hidden" name="surveyInstanceId" value={surveyInstance.id} />
-              <button
-                type="submit"
+              <SubmitButton
+                pendingText="Sender..."
                 disabled={!canEditSurvey}
                 className="w-full rounded-full bg-primary px-5 py-3 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Send spørgeskema nu (testmail)
-              </button>
+              </SubmitButton>
             </form>
 
             <form action={scheduleSurveySendAction} className="flex flex-wrap items-end gap-3 rounded-2xl border bg-muted/20 p-4">
@@ -773,13 +774,13 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
                   defaultValue={nextScheduledSend ? new Date(nextScheduledSend.sendAt.getTime() - new Date(nextScheduledSend.sendAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : undefined}
                 />
               </div>
-              <button
-                type="submit"
+              <SubmitButton
+                pendingText="Gemmer..."
                 disabled={!canEditSurvey}
                 className="rounded-full border px-4 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Gem
-              </button>
+              </SubmitButton>
             </form>
 
             <p className="hidden">
@@ -828,9 +829,9 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
                     <input type="checkbox" name="required" className="w-4 h-4" />
                     <span className="text-sm">{question.title}</span>
                   </label>
-                  <button type="submit" className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20">
+                  <SubmitButton pendingText="Tilføjer..." className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20">
                     Tilføj
-                  </button>
+                  </SubmitButton>
                 </form>
               ))}
             </div>
@@ -880,9 +881,9 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
             </div>
 
             <div className="md:col-span-2">
-              <button type="submit" className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+              <SubmitButton pendingText="Opretter..." className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
                 Opret og tilføj nyt spørgsmål
-              </button>
+              </SubmitButton>
             </div>
           </form>
         ) : null}
@@ -904,9 +905,9 @@ export default async function ClubSurveyDetailPage({ params }: { params: Promise
                 {canEditSurvey ? (
                   <form action={removeCustomQuestionAction}>
                     <input type="hidden" name="surveyInstanceQuestionId" value={item.id} />
-                    <button type="submit" className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100">
+                    <SubmitButton pendingText="Fjerner..." className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100">
                       Fjern
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : null}
               </div>

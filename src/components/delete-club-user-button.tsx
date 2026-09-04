@@ -1,5 +1,7 @@
 "use client";
 
+import { SubmitButton } from "@/components/submit-button";
+
 export function DeleteClubUserButton({
   action,
   userId,
@@ -12,8 +14,8 @@ export function DeleteClubUserButton({
   return (
     <form action={action}>
       <input type="hidden" name="userId" value={userId} />
-      <button
-        type="submit"
+      <SubmitButton
+        pendingText="Sletter..."
         className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
         onClick={(e) => {
           if (!confirm(`Slet ${userName}? Vedkommende mister adgang med det samme.`)) {
@@ -22,7 +24,7 @@ export function DeleteClubUserButton({
         }}
       >
         Slet
-      </button>
+      </SubmitButton>
     </form>
   );
 }

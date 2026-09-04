@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ClubDeliveryTabs } from "@/components/club-delivery-tabs";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SubmitButton } from "@/components/submit-button";
 
 const mailStatusLabel: Record<string, string> = {
   SENT: "Sendt",
@@ -325,9 +326,9 @@ export default async function ClubMailLogPage({
                 className="md:col-span-2"
                 required
               />
-              <button type="submit" className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">
+              <SubmitButton pendingText="Tilføjer..." className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">
                 Tilføj
-              </button>
+              </SubmitButton>
             </form>
 
             <div className="mt-3 max-h-52 overflow-auto rounded-md border">
@@ -347,12 +348,9 @@ export default async function ClubMailLogPage({
                       <td className="px-3 py-2">
                         <form action={removeExtraEmailAction}>
                           <input type="hidden" name="extraEmailId" value={recipient.id} />
-                          <button
-                            type="submit"
-                            className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
-                          >
+                          <SubmitButton pendingText="Fjerner..." className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100">
                             Fjern
-                          </button>
+                          </SubmitButton>
                         </form>
                       </td>
                     </tr>

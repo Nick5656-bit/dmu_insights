@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DeleteClubUserButton } from "@/components/delete-club-user-button";
 import { EditClubUserButton } from "@/components/edit-club-user-button";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function DmuClubUsersPage({
   searchParams,
@@ -241,12 +242,9 @@ export default async function DmuClubUsersPage({
           </div>
 
           <div className="sm:col-span-2">
-            <button
-              type="submit"
-              className="rounded-md bg-foreground px-5 py-2 text-sm font-medium text-background hover:bg-foreground/80"
-            >
+            <SubmitButton pendingText="Opretter..." className="rounded-md bg-foreground px-5 py-2 text-sm font-medium text-background hover:bg-foreground/80">
               Opret bruger
-            </button>
+            </SubmitButton>
           </div>
         </form>
       </section>

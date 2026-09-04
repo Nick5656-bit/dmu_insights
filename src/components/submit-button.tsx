@@ -1,14 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
-type Props = {
+type Props = Omit<React.ComponentProps<"button">, "type" | "children"> & {
   children: React.ReactNode;
   pendingText?: string;
-  className?: string;
 };
 
-function Spinner() {
+export function LoadingSpinner() {
   return (
     <svg
       className="h-4 w-4 animate-spin"
@@ -34,14 +34,55 @@ function Spinner() {
   );
 }
 
-export function SubmitButton({ children, pendingText, className }: Props) {
+export function SubmitButton({ children, pendingText, className, disabled, ...buttonProps }: Props) {
   const { pending } = useFormStatus();
 
   return (
-    <button type="submit" disabled={pending} className={className}>
+    <button {...buttonProps} type="submit" disabled={pending || disabled} className={className}>
       {pending ? (
         <span className="flex items-center justify-center gap-2">
-          <Spinner />
+          <LoadingSpinner />
+          {pendingText ?? children}
+        </span>
+      ) : (
+        children
+      )}
+    </button>
+  );
+}
+
+type DetachedSubmitButtonProps = Props & {
+  form: string;
+};
+
+// Used only where HTML requires the submit button to sit outside its associated form.
+export function DetachedSubmitButton({ children, pendingText, form, className, disabled, onClick, ...buttonProps }: DetachedSubmitButtonProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  return (
+    <button
+      {...buttonProps}
+      type="submit"
+      form={form}
+      disabled={isSubmitting || disabled}
+      className={className}
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented) {
+          return;
+        }
+
+        const linkedForm = document.getElementById(form) as HTMLFormElement | null;
+        if (linkedForm && !linkedForm.checkValidity()) {
+          return;
+        }
+
+        setIsSubmitting(true);
+      }}
+    >
+      {isSubmitting ? (
+        <span className="flex items-center justify-center gap-2">
+          <LoadingSpinner />
           {pendingText ?? children}
         </span>
       ) : (

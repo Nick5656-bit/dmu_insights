@@ -2,6 +2,7 @@
 
 import { QuestionType } from "@prisma/client";
 import { useState } from "react";
+import { SubmitButton } from "@/components/submit-button";
 
 type Props = {
   action: (formData: FormData) => Promise<void>;
@@ -58,9 +59,9 @@ export function ClubQuestionCreateForm({ action }: Props) {
       ) : null}
 
       <div className="md:col-span-2">
-        <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+        <SubmitButton pendingText="Opretter..." className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
           Opret spørgsmål
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

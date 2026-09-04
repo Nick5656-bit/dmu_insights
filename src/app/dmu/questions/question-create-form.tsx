@@ -2,6 +2,7 @@
 
 import { QuestionType } from "@prisma/client";
 import { useState } from "react";
+import { SubmitButton } from "@/components/submit-button";
 
 type Props = {
   action: (formData: FormData) => Promise<void>;
@@ -197,13 +198,13 @@ export function QuestionCreateForm({ action, benchmarkCategoryOptions }: Props) 
       ) : null}
 
       <div>
-        <button
-          type="submit"
+        <SubmitButton
+          pendingText="Opretter..."
           disabled={questionType === "SINGLE_CHOICE" && !hasEnoughOptions}
           className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Opret spørgsmål
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

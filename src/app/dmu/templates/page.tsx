@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { DetachedSubmitButton, SubmitButton } from "@/components/submit-button";
 import { TemplateStructureEditor } from "./template-structure-editor";
 import { TemplateCreatedNotice } from "./template-created-notice";
 
@@ -468,9 +469,9 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
             {questions.length === 0 ? <p className="text-sm text-muted-foreground">Ingen aktive standardspørgsmål.</p> : null}
           </div>
 
-          <button type="submit" form="create-template-form" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+          <DetachedSubmitButton form="create-template-form" pendingText="Opretter skabelon..." className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
             Opret skabelon
-          </button>
+          </DetachedSubmitButton>
         </div>
       </section>
 
@@ -551,9 +552,9 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
                     />
                   </div>
                   <div className="md:col-span-2 flex items-center justify-end">
-                    <button type="submit" className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+                    <SubmitButton pendingText="Gemmer..." className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted">
                       Gem skabelon
-                    </button>
+                    </SubmitButton>
                   </div>
                 </form>
 
@@ -632,8 +633,8 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
                   <form action={toggleTemplateAvailabilityAction}>
                     <input type="hidden" name="templateId" value={template.id} />
                     <input type="hidden" name="nextIsActive" value={template.isActive ? "false" : "true"} />
-                    <button
-                      type="submit"
+                    <SubmitButton
+                      pendingText={template.isActive ? "Skjuler..." : "Offentliggør..."}
                       className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
                         template.isActive
                           ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
@@ -641,13 +642,13 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
                       }`}
                     >
                       {template.isActive ? "Skjul for klubber" : "Offentliggør til klubber"}
-                    </button>
+                    </SubmitButton>
                   </form>
 
                   <form action={deleteTemplateAction}>
                     <input type="hidden" name="templateId" value={template.id} />
-                    <button
-                      type="submit"
+                    <SubmitButton
+                      pendingText="Sletter..."
                       disabled={template._count.surveyInstances > 0}
                       className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                       title={
@@ -657,7 +658,7 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
                       }
                     >
                       Slet skabelon
-                    </button>
+                    </SubmitButton>
                   </form>
 
                   <p className="text-xs text-muted-foreground">

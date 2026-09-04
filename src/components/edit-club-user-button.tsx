@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SubmitButton } from "@/components/submit-button";
 
 export function EditClubUserButton({
   action,
@@ -80,12 +81,9 @@ export function EditClubUserButton({
           >
             Annuller
           </button>
-          <button
-            type="submit"
-            className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-background hover:bg-foreground/80"
-          >
+          <SubmitButton pendingText="Gemmer..." className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-background hover:bg-foreground/80">
             Gem
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </div>

@@ -19,7 +19,7 @@ export function TemplateCreatedNotice({ templateId }: { templateId: string }) {
 
   return (
     <div role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
-      <span className="font-semibold">Skabelonen er oprettet.</span> Den er markeret nedenfor. Åbn den og vælg “Offentliggør til klubber”, før den kan bruges i en udsendelse.
+      <span className="font-semibold">Skabelonen er oprettet.</span>
     </div>
   );
 }

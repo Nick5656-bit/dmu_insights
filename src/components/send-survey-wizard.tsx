@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SubmitButton } from "@/components/submit-button";
 
 type SurveyType = "ANNUAL" | "EVENT";
 
@@ -312,7 +313,7 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
             </div>
           )}
 
-          <form action={createBatchAction} className="mt-6"><input type="hidden" name="payload" value={payload} /><button type="submit" disabled={!payload} className="rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">{isAnnual ? `Opret ${annualClubIds.length} ${annualClubIds.length === 1 ? "årlig måling" : "årlige målinger"} og planlæg udsendelse` : `Opret ${events.length} ${events.length === 1 ? "arrangement" : "arrangementer"} og planlæg udsendelse`}</button></form>
+          <form action={createBatchAction} className="mt-6"><input type="hidden" name="payload" value={payload} /><SubmitButton pendingText="Opretter og planlægger..." disabled={!payload} className="rounded-md bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50">{isAnnual ? `Opret ${annualClubIds.length} ${annualClubIds.length === 1 ? "årlig måling" : "årlige målinger"} og planlæg udsendelse` : `Opret ${events.length} ${events.length === 1 ? "arrangement" : "arrangementer"} og planlæg udsendelse`}</SubmitButton></form>
         </section>
       ) : null}
 
