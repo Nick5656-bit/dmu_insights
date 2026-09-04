@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AgeGroup, MemberRole, RaceClass } from "@prisma/client";
+import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
 import { ClubComparisonChart } from "@/components/charts/benchmark-bar-chart";
 import { QuestionDistributionBoard } from "@/components/charts/question-distribution-board";
 import { ClubMultiSelectFilter } from "@/components/club-multi-select-filter";
@@ -7,27 +7,13 @@ import { OpenTextQuestionSelect } from "@/components/open-text-question-select";
 import { TextResponsesModal } from "@/components/text-responses-modal";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  dashboardMotocrossClassOptions,
+  dashboardRespondentAgeGroupOptions,
+  dashboardRespondentRoleOptions,
+} from "@/lib/survey-segments";
 
 const SUPPRESSION_THRESHOLD = 5;
-
-const ageGroupOptions: { value: AgeGroup; label: string }[] = [
-  { value: "UNDER_18", label: "Under 18" },
-  { value: "AGE_18_30", label: "18-30" },
-  { value: "AGE_31_50", label: "31-50" },
-  { value: "AGE_51_PLUS", label: "51+" },
-];
-
-const raceClassOptions: { value: RaceClass; label: string }[] = [
-  { value: "MOTOCROSS", label: "Motocross" },
-  { value: "ENDURO", label: "Enduro" },
-  { value: "SPEEDWAY", label: "Speedway" },
-  { value: "TRIAL", label: "Trial" },
-];
-
-const memberRoleOptions: { value: MemberRole; label: string }[] = [
-  { value: "RIDER", label: "Kører" },
-  { value: "VOLUNTEER", label: "Frivillig" },
-];
 
 const surveyActionLinks = [
   { href: "/dmu/send", label: "Udsend spørgeskema" },
@@ -36,9 +22,9 @@ const surveyActionLinks = [
 
 type DmuDashboardProps = {
   searchParams: Promise<{
-    ageGroup?: string;
-    raceClass?: string;
-    memberRole?: string;
+    respondentAgeGroup?: string;
+    motocrossClass?: string;
+    respondentRole?: string;
     surveyTemplateId?: string;
     clubIds?: string | string[];
     textQuestionId?: string;
@@ -97,38 +83,44 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
       ).map((instance) => instance.id)
     : [];
 
-  const ageGroupFilter = ageGroupOptions.some((option) => option.value === params.ageGroup) ? (params.ageGroup as AgeGroup) : undefined;
-  const raceClassFilter = raceClassOptions.some((option) => option.value === params.raceClass) ? (params.raceClass as RaceClass) : undefined;
-  const memberRoleFilter = memberRoleOptions.some((option) => option.value === params.memberRole) ? (params.memberRole as MemberRole) : undefined;
+  const respondentAgeGroupFilter = dashboardRespondentAgeGroupOptions.some((option) => option.value === params.respondentAgeGroup)
+    ? (params.respondentAgeGroup as RespondentAgeGroup)
+    : undefined;
+  const motocrossClassFilter = dashboardMotocrossClassOptions.some((option) => option.value === params.motocrossClass)
+    ? (params.motocrossClass as MotocrossClass)
+    : undefined;
+  const respondentRoleFilter = dashboardRespondentRoleOptions.some((option) => option.value === params.respondentRole)
+    ? (params.respondentRole as RespondentRole)
+    : undefined;
 
   const activeFilters = [
     ...(selectedTemplate ? [`Skabelon: ${selectedTemplate.name}`] : []),
     ...(selectedClubs.length > 0 ? [`Klubber: ${selectedClubs.length}`] : []),
-    ...(ageGroupFilter
-      ? [`Alder: ${ageGroupOptions.find((option) => option.value === ageGroupFilter)?.label ?? ageGroupFilter}`]
+    ...(respondentAgeGroupFilter
+      ? [`Alder: ${dashboardRespondentAgeGroupOptions.find((option) => option.value === respondentAgeGroupFilter)?.label ?? respondentAgeGroupFilter}`]
       : []),
-    ...(raceClassFilter
-      ? [`Køreklasse: ${raceClassOptions.find((option) => option.value === raceClassFilter)?.label ?? raceClassFilter}`]
+    ...(motocrossClassFilter
+      ? [`Motocrossklasse: ${dashboardMotocrossClassOptions.find((option) => option.value === motocrossClassFilter)?.label ?? motocrossClassFilter}`]
       : []),
-    ...(memberRoleFilter
-      ? [`Rolle: ${memberRoleOptions.find((option) => option.value === memberRoleFilter)?.label ?? memberRoleFilter}`]
+    ...(respondentRoleFilter
+      ? [`Rolle: ${dashboardRespondentRoleOptions.find((option) => option.value === respondentRoleFilter)?.label ?? respondentRoleFilter}`]
       : []),
   ];
 
   const exportParams = new URLSearchParams();
   if (selectedClubIds.length > 0) exportParams.set("clubIds", selectedClubIds.join(","));
   if (selectedTemplate) exportParams.set("surveyTemplateId", selectedTemplate.id);
-  if (ageGroupFilter) exportParams.set("ageGroup", ageGroupFilter);
-  if (raceClassFilter) exportParams.set("raceClass", raceClassFilter);
-  if (memberRoleFilter) exportParams.set("memberRole", memberRoleFilter);
+  if (respondentAgeGroupFilter) exportParams.set("respondentAgeGroup", respondentAgeGroupFilter);
+  if (motocrossClassFilter) exportParams.set("motocrossClass", motocrossClassFilter);
+  if (respondentRoleFilter) exportParams.set("respondentRole", respondentRoleFilter);
   const exportHref = `/api/exports/results${exportParams.size > 0 ? `?${exportParams.toString()}` : ""}`;
 
   const responseWhere = {
     ...(selectedTemplate ? { surveyInstanceId: { in: selectedTemplateInstanceIds } } : {}),
     ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
-    ...(ageGroupFilter ? { ageGroup: ageGroupFilter } : {}),
-    ...(raceClassFilter ? { raceClass: raceClassFilter } : {}),
-    ...(memberRoleFilter ? { memberRole: memberRoleFilter } : {}),
+    ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
+    ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
+    ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
   };
 
   const [totalResponses, benchmarkQuestions] = await Promise.all([
@@ -215,9 +207,9 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
       : [];
   const comparisonResponseWhere = {
     ...(selectedTemplate ? { surveyInstanceId: { in: comparisonTemplateInstanceIds } } : {}),
-    ...(ageGroupFilter ? { ageGroup: ageGroupFilter } : {}),
-    ...(raceClassFilter ? { raceClass: raceClassFilter } : {}),
-    ...(memberRoleFilter ? { memberRole: memberRoleFilter } : {}),
+    ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
+    ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
+    ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
   };
 
   let nationalKeyAverage = 0;
@@ -396,12 +388,12 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
           {/* Alder */}
           <div className="relative md:col-span-1">
             <select
-              name="ageGroup"
-              defaultValue={ageGroupFilter ?? ""}
+              name="respondentAgeGroup"
+              defaultValue={respondentAgeGroupFilter ?? ""}
               className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
             >
               <option value="">Alle aldre</option>
-              {ageGroupOptions.map((option) => (
+              {dashboardRespondentAgeGroupOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -413,12 +405,12 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
           {/* Klasse */}
           <div className="relative md:col-span-1">
             <select
-              name="raceClass"
-              defaultValue={raceClassFilter ?? ""}
+              name="motocrossClass"
+              defaultValue={motocrossClassFilter ?? ""}
               className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
             >
               <option value="">Alle klasser</option>
-              {raceClassOptions.map((option) => (
+              {dashboardMotocrossClassOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -430,12 +422,12 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
           {/* Rolle */}
           <div className="relative md:col-span-1">
             <select
-              name="memberRole"
-              defaultValue={memberRoleFilter ?? ""}
+              name="respondentRole"
+              defaultValue={respondentRoleFilter ?? ""}
               className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
             >
               <option value="">Alle roller</option>
-              {memberRoleOptions.map((option) => (
+              {dashboardRespondentRoleOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

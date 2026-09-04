@@ -1,31 +1,17 @@
 import Link from "next/link";
-import { AgeGroup, MemberRole, RaceClass } from "@prisma/client";
+import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
 import { BenchmarkBarChart } from "@/components/charts/benchmark-bar-chart";
 import { QuestionDistributionBoard } from "@/components/charts/question-distribution-board";
 import { TextResponsesModal } from "@/components/text-responses-modal";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  dashboardMotocrossClassOptions,
+  dashboardRespondentAgeGroupOptions,
+  dashboardRespondentRoleOptions,
+} from "@/lib/survey-segments";
 
 const SUPPRESSION_THRESHOLD = 5;
-
-const ageGroupOptions: { value: AgeGroup; label: string }[] = [
-  { value: "UNDER_18", label: "Under 18" },
-  { value: "AGE_18_30", label: "18-30" },
-  { value: "AGE_31_50", label: "31-50" },
-  { value: "AGE_51_PLUS", label: "51+" },
-];
-
-const raceClassOptions: { value: RaceClass; label: string }[] = [
-  { value: "MOTOCROSS", label: "Motocross" },
-  { value: "ENDURO", label: "Enduro" },
-  { value: "SPEEDWAY", label: "Speedway" },
-  { value: "TRIAL", label: "Trial" },
-];
-
-const memberRoleOptions: { value: MemberRole; label: string }[] = [
-  { value: "RIDER", label: "Kører" },
-  { value: "VOLUNTEER", label: "Frivillig" },
-];
 
 const benchmarkCategoryLabels: Record<string, string> = {
   SATISFACTION: "Tilfredshed",
@@ -50,7 +36,12 @@ function formatBenchmarkCategory(value: string) {
 }
 
 type ClubDashboardProps = {
-  searchParams: Promise<{ ageGroup?: string; raceClass?: string; memberRole?: string; surveyInstanceId?: string }>;
+  searchParams: Promise<{
+    respondentAgeGroup?: string;
+    motocrossClass?: string;
+    respondentRole?: string;
+    surveyInstanceId?: string;
+  }>;
 };
 
 export default async function ClubDashboardPage({ searchParams }: ClubDashboardProps) {
@@ -82,22 +73,28 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
   const selectedSurvey = availableSurveys.find((s) => s.id === params.surveyInstanceId);
   const selectedSurveyId = selectedSurvey?.id;
 
-  const ageGroupFilter = ageGroupOptions.some((o) => o.value === params.ageGroup) ? (params.ageGroup as AgeGroup) : undefined;
-  const raceClassFilter = raceClassOptions.some((o) => o.value === params.raceClass) ? (params.raceClass as RaceClass) : undefined;
-  const memberRoleFilter = memberRoleOptions.some((o) => o.value === params.memberRole) ? (params.memberRole as MemberRole) : undefined;
+  const respondentAgeGroupFilter = dashboardRespondentAgeGroupOptions.some((option) => option.value === params.respondentAgeGroup)
+    ? (params.respondentAgeGroup as RespondentAgeGroup)
+    : undefined;
+  const motocrossClassFilter = dashboardMotocrossClassOptions.some((option) => option.value === params.motocrossClass)
+    ? (params.motocrossClass as MotocrossClass)
+    : undefined;
+  const respondentRoleFilter = dashboardRespondentRoleOptions.some((option) => option.value === params.respondentRole)
+    ? (params.respondentRole as RespondentRole)
+    : undefined;
 
   const ownResponseWhere = {
     clubId: session.clubId,
     ...(selectedSurveyId ? { surveyInstanceId: selectedSurveyId } : {}),
-    ...(ageGroupFilter ? { ageGroup: ageGroupFilter } : {}),
-    ...(raceClassFilter ? { raceClass: raceClassFilter } : {}),
-    ...(memberRoleFilter ? { memberRole: memberRoleFilter } : {}),
+    ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
+    ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
+    ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
   };
 
   const benchmarkResponseWhere = {
-    ...(ageGroupFilter ? { ageGroup: ageGroupFilter } : {}),
-    ...(raceClassFilter ? { raceClass: raceClassFilter } : {}),
-    ...(memberRoleFilter ? { memberRole: memberRoleFilter } : {}),
+    ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
+    ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
+    ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
   };
 
   const [members, surveys, ownResponsesCount, benchmarkResponsesCount, benchmarkQuestions] = await Promise.all([
@@ -189,9 +186,9 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
   const activeFilters = [
     selectedSurvey ? `Spørgeskema: ${selectedSurvey.name}` : undefined,
-    ageGroupFilter ? `Alder: ${ageGroupOptions.find((o) => o.value === ageGroupFilter)?.label}` : undefined,
-    raceClassFilter ? `Køreklasse: ${raceClassOptions.find((o) => o.value === raceClassFilter)?.label}` : undefined,
-    memberRoleFilter ? `Rolle: ${memberRoleOptions.find((o) => o.value === memberRoleFilter)?.label}` : undefined,
+    respondentAgeGroupFilter ? `Alder: ${dashboardRespondentAgeGroupOptions.find((option) => option.value === respondentAgeGroupFilter)?.label}` : undefined,
+    motocrossClassFilter ? `Motocrossklasse: ${dashboardMotocrossClassOptions.find((option) => option.value === motocrossClassFilter)?.label}` : undefined,
+    respondentRoleFilter ? `Rolle: ${dashboardRespondentRoleOptions.find((option) => option.value === respondentRoleFilter)?.label}` : undefined,
   ].filter(Boolean) as string[];
 
   const dmuImprovementQuestion = await prisma.question.findFirst({
@@ -222,9 +219,9 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
   const canRenderBenchmark = canShowOwnSegment && canShowBenchmarkSegment && benchmarkRows.length > 0;
   const exportParams = new URLSearchParams();
   if (selectedSurveyId) exportParams.set("surveyInstanceId", selectedSurveyId);
-  if (ageGroupFilter) exportParams.set("ageGroup", ageGroupFilter);
-  if (raceClassFilter) exportParams.set("raceClass", raceClassFilter);
-  if (memberRoleFilter) exportParams.set("memberRole", memberRoleFilter);
+  if (respondentAgeGroupFilter) exportParams.set("respondentAgeGroup", respondentAgeGroupFilter);
+  if (motocrossClassFilter) exportParams.set("motocrossClass", motocrossClassFilter);
+  if (respondentRoleFilter) exportParams.set("respondentRole", respondentRoleFilter);
   const exportHref = `/api/exports/results${exportParams.size > 0 ? `?${exportParams.toString()}` : ""}`;
 
   return (
@@ -273,7 +270,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
         )}
 
         {/* Filterrækken */}
-        <form className="mt-4 grid gap-2 rounded-[24px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm md:grid-cols-6" method="get">
+        <form className="mt-4 grid gap-2 rounded-[24px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm md:grid-cols-2 xl:grid-cols-6" method="get">
           {/* Spørgeskema */}
           <div className="relative md:col-span-2">
             <select name="surveyInstanceId" defaultValue={selectedSurveyId ?? ""}
@@ -288,30 +285,30 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
           {/* Alder */}
           <div className="relative md:col-span-1">
-            <select name="ageGroup" defaultValue={ageGroupFilter ?? ""}
+            <select name="respondentAgeGroup" defaultValue={respondentAgeGroupFilter ?? ""}
               className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
               <option value="">Alle aldre</option>
-              {ageGroupOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {dashboardRespondentAgeGroupOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
 
           {/* Klasse */}
           <div className="relative md:col-span-1">
-            <select name="raceClass" defaultValue={raceClassFilter ?? ""}
+            <select name="motocrossClass" defaultValue={motocrossClassFilter ?? ""}
               className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
               <option value="">Alle klasser</option>
-              {raceClassOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {dashboardMotocrossClassOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
 
           {/* Rolle */}
           <div className="relative md:col-span-1">
-            <select name="memberRole" defaultValue={memberRoleFilter ?? ""}
+            <select name="respondentRole" defaultValue={respondentRoleFilter ?? ""}
               className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
               <option value="">Alle roller</option>
-              {memberRoleOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {dashboardRespondentRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>

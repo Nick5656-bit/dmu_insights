@@ -1,13 +1,10 @@
-import { AgeGroup, MemberRole, Prisma, RaceClass } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isMotocrossClass, isRespondentAgeGroup, isRespondentRole } from "@/lib/survey-segments";
 
 const SUPPRESSION_THRESHOLD = 5;
-
-const ageGroups = new Set<AgeGroup>(["UNDER_18", "AGE_18_30", "AGE_31_50", "AGE_51_PLUS"]);
-const raceClasses = new Set<RaceClass>(["MOTOCROSS", "ENDURO", "SPEEDWAY", "TRIAL"]);
-const memberRoles = new Set<MemberRole>(["RIDER", "VOLUNTEER"]);
 
 function parseClubIds(rawValue: string | null) {
   if (!rawValue) {
@@ -36,16 +33,16 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const ageGroup = searchParams.get("ageGroup");
-  const raceClass = searchParams.get("raceClass");
-  const memberRole = searchParams.get("memberRole");
+  const respondentAgeGroup = searchParams.get("respondentAgeGroup");
+  const motocrossClass = searchParams.get("motocrossClass");
+  const respondentRole = searchParams.get("respondentRole");
   const surveyTemplateId = searchParams.get("surveyTemplateId");
   const surveyInstanceId = searchParams.get("surveyInstanceId");
 
   const responseWhere: Prisma.SurveyResponseWhereInput = {
-    ...(ageGroup && ageGroups.has(ageGroup as AgeGroup) ? { ageGroup: ageGroup as AgeGroup } : {}),
-    ...(raceClass && raceClasses.has(raceClass as RaceClass) ? { raceClass: raceClass as RaceClass } : {}),
-    ...(memberRole && memberRoles.has(memberRole as MemberRole) ? { memberRole: memberRole as MemberRole } : {}),
+    ...(respondentAgeGroup && isRespondentAgeGroup(respondentAgeGroup) ? { respondentAgeGroup } : {}),
+    ...(motocrossClass && isMotocrossClass(motocrossClass) ? { motocrossClass } : {}),
+    ...(respondentRole && isRespondentRole(respondentRole) ? { respondentRole } : {}),
   };
 
   let exportScope = "Hele DMU";

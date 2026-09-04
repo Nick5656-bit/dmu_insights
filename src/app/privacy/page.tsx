@@ -25,7 +25,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold">Hvilke oplysninger behandles?</h2>
             <p className="mt-2 text-muted-foreground">
-              Ved udsendelse behandles navn, e-mailadresse, arrangementstilknytning og teknisk status for invitationen. Dine survey-svar gemmes adskilt fra invitationsoplysningerne.
+              Ved udsendelse behandles navn, e-mailadresse, arrangementstilknytning og teknisk status for invitationen. I spørgeskemaet kan du oplyse aldersgruppe, din rolle i klubben og – hvis du er aktiv på banen – din primære motocrossklasse. Dine survey-svar og disse segmentoplysninger gemmes adskilt fra invitationsoplysningerne.
             </p>
           </section>
 

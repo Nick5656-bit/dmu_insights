@@ -1,12 +1,23 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { DmuLogo } from "@/components/dmu-logo";
+import { roleNeedsMotocrossClass } from "@/lib/survey-segments";
+
+type SegmentKey = "respondentAgeGroup" | "respondentRole" | "motocrossClass";
 
 export type WizardStep =
   | { kind: "INTRO"; title: string; description: string }
   | { kind: "HEADING"; id: string; title: string }
+  | {
+      kind: "SEGMENT";
+      id: string;
+      segment: SegmentKey;
+      title: string;
+      description: string;
+      options: { value: string; label: string; group?: string }[];
+    }
   | {
       kind: "QUESTION";
       id: string;
@@ -26,12 +37,24 @@ type Props = {
 export function SurveyWizard({ steps, submitAction }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [segmentAnswers, setSegmentAnswers] = useState<Partial<Record<SegmentKey, string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const current = steps[currentIndex];
-  const isLast = currentIndex === steps.length - 1;
-  const isFirst = currentIndex === 0;
+  const visibleSteps = useMemo(
+    () =>
+      steps.filter(
+        (step) =>
+          step.kind !== "SEGMENT" ||
+          step.segment !== "motocrossClass" ||
+          roleNeedsMotocrossClass(segmentAnswers.respondentRole as "RIDER" | "SIDECAR_PASSENGER")
+      ),
+    [segmentAnswers.respondentRole, steps]
+  );
+  const safeCurrentIndex = Math.min(currentIndex, Math.max(visibleSteps.length - 1, 0));
+  const current = visibleSteps[safeCurrentIndex];
+  const isLast = safeCurrentIndex === visibleSteps.length - 1;
+  const isFirst = safeCurrentIndex === 0;
 
   // Nummerér kun spørgsmål
   const questionNumbers: Record<string, number> = {};
@@ -49,7 +72,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
   const progressPct =
     totalQuestions > 0
       ? Math.round((answeredCount / totalQuestions) * 100)
-      : currentIndex === steps.length - 1
+      : isLast
       ? 100
       : 0;
 
@@ -61,14 +84,20 @@ export function SurveyWizard({ steps, submitAction }: Props) {
         return;
       }
     }
+
+    if (current.kind === "SEGMENT" && !segmentAnswers[current.segment]) {
+      setError("Vælg venligst en mulighed for at fortsætte.");
+      return;
+    }
+
     setError(null);
-    setCurrentIndex((i) => i + 1);
+    setCurrentIndex((index) => Math.min(index + 1, visibleSteps.length - 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function goBack() {
     setError(null);
-    setCurrentIndex((i) => i - 1);
+    setCurrentIndex((index) => Math.max(index - 1, 0));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -83,6 +112,17 @@ export function SurveyWizard({ steps, submitAction }: Props) {
     }
   }
 
+  function setSegmentAnswer(segment: SegmentKey, value: string) {
+    setSegmentAnswers((previous) => ({
+      ...previous,
+      [segment]: value,
+      ...(segment === "respondentRole" && !roleNeedsMotocrossClass(value as "RIDER" | "SIDECAR_PASSENGER")
+        ? { motocrossClass: undefined }
+        : {}),
+    }));
+    setError(null);
+  }
+
   function submit() {
     if (current.kind === "QUESTION") {
       const answer = answers[current.questionId];
@@ -91,9 +131,28 @@ export function SurveyWizard({ steps, submitAction }: Props) {
         return;
       }
     }
+
+    if (!segmentAnswers.respondentAgeGroup || !segmentAnswers.respondentRole) {
+      setError("Udfyld venligst de korte baggrundsspørgsmål først.");
+      return;
+    }
+
+    if (
+      roleNeedsMotocrossClass(segmentAnswers.respondentRole as "RIDER" | "SIDECAR_PASSENGER") &&
+      !segmentAnswers.motocrossClass
+    ) {
+      setError("Vælg venligst din primære motocrossklasse.");
+      return;
+    }
+
     const formData = new FormData();
     for (const [questionId, value] of Object.entries(answers)) {
       formData.set(`question_${questionId}`, value);
+    }
+    formData.set("segment_respondentAgeGroup", segmentAnswers.respondentAgeGroup);
+    formData.set("segment_respondentRole", segmentAnswers.respondentRole);
+    if (segmentAnswers.motocrossClass) {
+      formData.set("segment_motocrossClass", segmentAnswers.motocrossClass);
     }
     startTransition(async () => {
       await submitAction(formData);
@@ -111,6 +170,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
               {questionNumbers[current.questionId]} / {totalQuestions}
             </span>
           )}
+          {current.kind === "SEGMENT" && <span className="text-xs font-medium text-muted-foreground">Om dig</span>}
         </div>
         {/* Fremskridtsbar */}
         <div className="mx-auto mt-2 max-w-lg">
@@ -164,6 +224,60 @@ export function SurveyWizard({ steps, submitAction }: Props) {
               <p className="mt-3 text-sm text-muted-foreground">
                 Tryk Næste for at besvare spørgsmålene i dette afsnit.
               </p>
+            </div>
+          )}
+
+          {/* ── Faste segmentspørgsmål ──────────── */}
+          {current.kind === "SEGMENT" && (
+            <div>
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">Kort om dig</p>
+              <h2 className="text-xl font-semibold leading-snug text-foreground">{current.title}</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{current.description}</p>
+
+              <div className="mt-8">
+                {current.segment === "motocrossClass" ? (
+                  <label className="block">
+                    <span className="sr-only">Vælg motocrossklasse</span>
+                    <select
+                      value={segmentAnswers[current.segment] ?? ""}
+                      onChange={(event) => setSegmentAnswer(current.segment, event.target.value)}
+                      className="h-14 w-full rounded-2xl border border-border/70 bg-background px-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    >
+                      <option value="" disabled>Vælg din primære klasse</option>
+                      {Array.from(new Set(current.options.map((option) => option.group ?? "Andre"))).map((group) => (
+                        <optgroup key={group} label={group}>
+                          {current.options
+                            .filter((option) => (option.group ?? "Andre") === group)
+                            .map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div className="space-y-3">
+                    {current.options.map((option) => {
+                      const selected = segmentAnswers[current.segment] === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setSegmentAnswer(current.segment, option.value)}
+                          className={[
+                            "w-full rounded-2xl border-2 px-4 py-4 text-left text-sm font-medium transition-all active:scale-[0.98]",
+                            selected
+                              ? "border-primary bg-primary/8 text-foreground"
+                              : "border-border/70 bg-background text-foreground hover:border-primary/40 hover:bg-muted/20",
+                          ].join(" ")}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -254,11 +368,10 @@ export function SurveyWizard({ steps, submitAction }: Props) {
 
               </div>
 
-              {error && (
-                <p className="mt-3 text-sm font-medium text-destructive">{error}</p>
-              )}
             </div>
           )}
+
+          {error && <p className="mt-5 text-sm font-medium text-destructive">{error}</p>}
 
         </div>
       </main>

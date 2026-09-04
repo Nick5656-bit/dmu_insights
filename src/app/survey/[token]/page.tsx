@@ -3,6 +3,15 @@ import { DmuLogo } from "@/components/dmu-logo";
 import { SurveyWizard, type WizardStep } from "@/components/survey-wizard";
 import { prisma } from "@/lib/prisma";
 import { hashSurveyToken } from "@/lib/survey-token";
+import {
+  isRespondentAgeGroup,
+  isRespondentRole,
+  isSelectableMotocrossClass,
+  motocrossClassOptionGroups,
+  respondentAgeGroupOptions,
+  respondentRoleOptions,
+  roleNeedsMotocrossClass,
+} from "@/lib/survey-segments";
 
 type LayoutItem =
   | { id: string; kind: "HEADING"; title: string }
@@ -28,12 +37,6 @@ function parseLayoutItems(rawLayoutJson: unknown): LayoutItem[] {
   }
   return items;
 }
-
-const fallbackRespondentProfile = {
-  ageGroup: "AGE_31_50" as const,
-  raceClass: "MOTOCROSS" as const,
-  memberRole: "VOLUNTEER" as const,
-};
 
 function ErrorCard({ title, description }: { title: string; description: string }) {
   return (
@@ -120,6 +123,21 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
 
     if (surveyHasClosed || !currentInvitation) return;
 
+    const respondentAgeGroup = String(formData.get("segment_respondentAgeGroup") ?? "");
+    const respondentRole = String(formData.get("segment_respondentRole") ?? "");
+    const rawMotocrossClass = String(formData.get("segment_motocrossClass") ?? "");
+
+    if (!isRespondentAgeGroup(respondentAgeGroup) || respondentAgeGroup === "NOT_REPORTED") return;
+    if (!isRespondentRole(respondentRole) || respondentRole === "NOT_REPORTED") return;
+
+    const motocrossClass = roleNeedsMotocrossClass(respondentRole)
+      ? isSelectableMotocrossClass(rawMotocrossClass)
+        ? rawMotocrossClass
+        : null
+      : "NOT_APPLICABLE";
+
+    if (!motocrossClass) return;
+
     const answersToCreate: { questionId: string; numericValue?: number; optionValue?: string; textValue?: string }[] = [];
 
     for (const surveyQuestion of currentInvitation.surveyInstance.surveyInstanceQuestions) {
@@ -161,9 +179,14 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
         data: {
           surveyInstanceId: currentInvitation.surveyInstanceId,
           clubId: currentInvitation.surveyInstance.clubId,
-          ageGroup: currentInvitation.member?.ageGroup ?? fallbackRespondentProfile.ageGroup,
-          raceClass: currentInvitation.member?.raceClass ?? fallbackRespondentProfile.raceClass,
-          memberRole: currentInvitation.member?.memberRole ?? fallbackRespondentProfile.memberRole,
+          // Segmenterne kommer altid fra den aktuelle besvarelse – aldrig fra
+          // invitationens medlemsprofil eller en fast standardværdi.
+          ageGroup: null,
+          raceClass: null,
+          memberRole: null,
+          respondentAgeGroup,
+          respondentRole,
+          motocrossClass,
           submittedAt,
         },
       });
@@ -199,6 +222,32 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
       kind: "INTRO",
       title: "Medlemsspørgeskema",
       description: "Dine svar behandles fortroligt og vises kun samlet. Det tager blot et par minutter.",
+    },
+    {
+      kind: "SEGMENT",
+      id: "respondent-age-group",
+      segment: "respondentAgeGroup",
+      title: "Hvilken aldersgruppe tilhører du?",
+      description: "Oplysningen bruges kun til at vise resultater samlet for forskellige aldersgrupper.",
+      options: respondentAgeGroupOptions,
+    },
+    {
+      kind: "SEGMENT",
+      id: "respondent-role",
+      segment: "respondentRole",
+      title: "Hvad beskriver dig bedst i klubben?",
+      description: "Oplysningen bruges kun til at vise resultater samlet på tværs af roller.",
+      options: respondentRoleOptions,
+    },
+    {
+      kind: "SEGMENT",
+      id: "respondent-motocross-class",
+      segment: "motocrossClass",
+      title: "Hvilken motocrossklasse kører du primært i?",
+      description: "Vælg den klasse du oftest eller senest har kørt i.",
+      options: motocrossClassOptionGroups.flatMap((group) =>
+        group.options.map((option) => ({ ...option, group: group.label }))
+      ),
     },
   ];
 

@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/survey-token.test.ts src/lib/reminder-policy.test.ts",
+    "test": "tsx --test src/lib/survey-token.test.ts src/lib/reminder-policy.test.ts src/lib/survey-segments.test.ts",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
