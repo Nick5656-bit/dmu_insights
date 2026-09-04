@@ -155,6 +155,24 @@
 }
 
 @layer components {
+  @keyframes template-created-highlight {
+    0%,
+    100% {
+      background-color: transparent;
+      border-color: var(--border);
+    }
+    50% {
+      background-color: color-mix(in oklab, var(--muted) 72%, var(--background));
+      border-color: color-mix(in oklab, var(--primary) 36%, var(--border));
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .template-created-highlight {
+      animation: template-created-highlight 1.3s ease-in-out 3;
+    }
+  }
+
   button:not(:disabled),
   input[type="button"]:not(:disabled),
   input[type="submit"]:not(:disabled),

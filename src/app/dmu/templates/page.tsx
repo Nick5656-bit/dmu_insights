@@ -1,9 +1,11 @@
 import { SurveyType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TemplateStructureEditor } from "./template-structure-editor";
+import { TemplateCreatedNotice } from "./template-created-notice";
 
 const createTemplateSchema = z.object({
   name: z.string().trim().min(3),
@@ -64,6 +66,7 @@ function normalizeKeyPart(value: string): string {
 type DmuTemplatesPageProps = {
   searchParams: Promise<{
     benchmarkCategory?: string;
+    created?: string;
   }>;
 };
 
@@ -117,6 +120,7 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
       .map((question) => normalizeKeyPart(question.benchmarkKey?.split("_")[0] ?? ""))
       .filter(Boolean)
   )].sort((a, b) => a.localeCompare(b, "da"));
+  const createdTemplateId = templates.some((template) => template.id === params.created) ? params.created : undefined;
 
   async function createTemplateAction(formData: FormData) {
     "use server";
@@ -189,6 +193,7 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
     });
 
     revalidatePath("/dmu/templates");
+    redirect(`/dmu/templates?created=${template.id}`);
   }
 
   async function updateTemplateAction(formData: FormData) {
@@ -476,9 +481,15 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
             <p className="mt-1 text-sm text-muted-foreground">{templates.length} i alt</p>
           </div>
         </div>
+        {createdTemplateId ? <TemplateCreatedNotice templateId={createdTemplateId} /> : null}
         <div className="mt-4 space-y-3">
           {templates.map((template) => (
-            <details key={template.id} className="rounded-lg border p-4">
+            <details
+              key={template.id}
+              id={`template-${template.id}`}
+              tabIndex={-1}
+              className={`rounded-lg border p-4 ${template.id === createdTemplateId ? "template-created-highlight" : ""}`}
+            >
               <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
