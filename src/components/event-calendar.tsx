@@ -52,6 +52,10 @@ function toMonthKey(month: CalendarMonth) {
   return `${month.year}-${String(month.month + 1).padStart(2, "0")}`;
 }
 
+function toDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function getMonthLabel(month: CalendarMonth) {
   return new Intl.DateTimeFormat("da-DK", {
     month: "long",
@@ -127,29 +131,21 @@ function getBadgeToneClass(badge: string) {
 }
 
 export function EventCalendar({ title, description, emptyText, items }: EventCalendarProps) {
+  // Use the visitor's local date rather than the first arrangement in the list.
+  // Otherwise an older event can look like the current day when the calendar opens.
+  const [today] = useState(() => new Date());
+  const todayKey = toDateKey(today);
+
   const sortedItems = useMemo(
     () => [...items].sort((left, right) => left.dateKey.localeCompare(right.dateKey) || left.title.localeCompare(right.title)),
     [items],
   );
 
-  const initialMonth = useMemo<CalendarMonth>(() => {
-    if (sortedItems.length > 0) {
-      const firstItemDate = parseDateKey(sortedItems[0].dateKey);
-      return {
-        year: firstItemDate.year,
-        month: firstItemDate.month,
-      };
-    }
-
-    const now = new Date();
-    return {
-      year: now.getFullYear(),
-      month: now.getMonth(),
-    };
-  }, [sortedItems]);
-
-  const [currentMonth, setCurrentMonth] = useState<CalendarMonth>(initialMonth);
-  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(sortedItems[0]?.dateKey ?? null);
+  const [currentMonth, setCurrentMonth] = useState<CalendarMonth>(() => ({
+    year: today.getFullYear(),
+    month: today.getMonth(),
+  }));
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(todayKey);
 
   const itemsByDate = useMemo(() => {
     const map = new Map<string, EventCalendarItem[]>();
@@ -175,6 +171,11 @@ export function EventCalendar({ title, description, emptyText, items }: EventCal
     setSelectedDateKey(nextSelectedDate);
   }
 
+  function showToday() {
+    setCurrentMonth({ year: today.getFullYear(), month: today.getMonth() });
+    setSelectedDateKey(todayKey);
+  }
+
   return (
     <section className="rounded-xl border bg-background p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -183,6 +184,13 @@ export function EventCalendar({ title, description, emptyText, items }: EventCal
           {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={showToday}
+            className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted"
+          >
+            I dag
+          </button>
           <button
             type="button"
             onClick={() => changeMonth(-1)}
@@ -226,6 +234,7 @@ export function EventCalendar({ title, description, emptyText, items }: EventCal
               const dayItems = itemsByDate.get(dateKey) ?? [];
               const dayVisualState = getDayVisualState(dayItems);
               const isSelected = selectedDateKey === dateKey;
+              const isToday = todayKey === dateKey;
               const isClickable = dayItems.length > 0;
 
               const dayToneClass =
@@ -259,12 +268,16 @@ export function EventCalendar({ title, description, emptyText, items }: EventCal
                   className={cn(
                     "min-h-24 rounded-xl border p-2.5 text-left transition-colors",
                     isSelected ? "ring-1 ring-primary shadow-sm" : "",
+                    isToday && !isSelected ? "border-primary/50" : "",
                     dayVisualState === "MIXED" ? "border-emerald-300" : dayToneClass,
                     isClickable ? "hover:brightness-[0.98]" : "cursor-default text-muted-foreground",
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className={cn("text-sm font-semibold", isClickable ? "text-foreground" : "text-muted-foreground")}>{day}</span>
+                    <span className={cn("text-sm font-semibold", isClickable ? "text-foreground" : "text-muted-foreground")}>
+                      {day}
+                      {isToday ? <span className="ml-1 text-[10px] font-medium text-primary">I dag</span> : null}
+                    </span>
                     {dayItems.length > 0 ? (
                       <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", countToneClass)}>
                         {dayItems.length}
