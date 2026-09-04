@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { SurveyType } from "@prisma/client";
 import { z } from "zod";
 import { SendSurveyWizard } from "@/components/send-survey-wizard";
 import { requireRole } from "@/lib/auth";
@@ -15,10 +16,20 @@ const eventInputSchema = z.object({
   closesAt: z.string().datetime({ offset: true }),
 });
 
-const batchSchema = z.object({
-  templateId: z.string().min(1),
-  events: z.array(eventInputSchema).min(1).max(50),
-});
+const batchSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("EVENT"),
+    templateId: z.string().min(1),
+    events: z.array(eventInputSchema).min(1).max(50),
+  }),
+  z.object({
+    mode: z.literal("ANNUAL"),
+    templateId: z.string().min(1),
+    clubIds: z.array(z.string().min(1)).min(1).max(50),
+    sendAt: z.string().datetime({ offset: true }),
+    closesAt: z.string().datetime({ offset: true }),
+  }),
+]);
 
 export default async function DmuSendPage() {
   await requireRole("DMU_ADMIN");
@@ -26,14 +37,15 @@ export default async function DmuSendPage() {
   const [clubs, templates] = await Promise.all([
     prisma.club.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.surveyTemplate.findMany({
-      where: { surveyType: "EVENT", isActive: true },
+      where: { isActive: true },
       select: {
         id: true,
         name: true,
         description: true,
+        surveyType: true,
         _count: { select: { templateQuestions: true } },
       },
-      orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+      orderBy: [{ surveyType: "asc" }, { updatedAt: "desc" }, { name: "asc" }],
     }),
   ]);
 
@@ -53,27 +65,93 @@ export default async function DmuSendPage() {
       redirect("/dmu/send?error=invalid_payload");
     }
 
-    if (parsed.data.events.some((event) => new Date(event.closesAt) <= new Date(event.sendAt))) {
+    const payload = parsed.data;
+    const activeClubIds = new Set(
+      (await prisma.club.findMany({ where: { active: true }, select: { id: true } })).map((club) => club.id),
+    );
+
+    if (payload.mode === "ANNUAL") {
+      const sendAt = new Date(payload.sendAt);
+      const closesAt = new Date(payload.closesAt);
+      if (Number.isNaN(sendAt.getTime()) || Number.isNaN(closesAt.getTime()) || closesAt <= sendAt) {
+        redirect("/dmu/send?error=invalid_close_time");
+      }
+
+      const clubIds = [...new Set(payload.clubIds)];
+      if (clubIds.some((clubId) => !activeClubIds.has(clubId))) {
+        redirect("/dmu/send?error=club_unavailable");
+      }
+
+      const template = await prisma.surveyTemplate.findFirst({
+        where: { id: payload.templateId, isActive: true, surveyType: SurveyType.ANNUAL },
+        include: { templateQuestions: { orderBy: { sortOrder: "asc" } } },
+      });
+      if (!template) {
+        redirect("/dmu/send?error=template_unavailable");
+      }
+
+      await prisma.$transaction(async (transaction) => {
+        const dateLabel = new Intl.DateTimeFormat("da-DK", { day: "2-digit", month: "short", year: "numeric" }).format(sendAt);
+
+        for (const clubId of clubIds) {
+          const survey = await transaction.surveyInstance.create({
+            data: {
+              surveyTemplateId: template.id,
+              clubId,
+              name: `${template.name} - ${dateLabel}`,
+              surveyType: "ANNUAL",
+              status: "SCHEDULED",
+              createdByUserId: session.userId,
+              // DMU opretter og planlægger denne måling direkte for klubben.
+              clubReadyAt: new Date(),
+              closesAt,
+            },
+          });
+
+          if (template.templateQuestions.length > 0) {
+            await transaction.surveyInstanceQuestion.createMany({
+              data: template.templateQuestions.map((question) => ({
+                surveyInstanceId: survey.id,
+                questionId: question.questionId,
+                sortOrder: question.sortOrder,
+                required: question.required,
+                sourceType: "CORE" as const,
+              })),
+            });
+          }
+
+          await transaction.scheduledSend.create({
+            data: { surveyInstanceId: survey.id, sendAt, status: "PENDING", triggerType: "MANUAL" },
+          });
+        }
+      });
+
+      revalidatePath("/dmu/send");
+      revalidatePath("/dmu/surveys");
+      revalidatePath("/dmu/outbox");
+      revalidatePath("/dmu/dashboard");
+      redirect("/dmu/surveys?surveyType=ANNUAL&status=SCHEDULED");
+    }
+
+    if (payload.events.some((event) => new Date(event.closesAt) <= new Date(event.sendAt))) {
       redirect("/dmu/send?error=invalid_close_time");
     }
 
+    const clubIds = [...new Set(payload.events.map((event) => event.clubId))];
+    if (clubIds.some((clubId) => !activeClubIds.has(clubId))) {
+      redirect("/dmu/send?error=club_unavailable");
+    }
+
     const template = await prisma.surveyTemplate.findFirst({
-      where: { id: parsed.data.templateId, surveyType: "EVENT", isActive: true },
+      where: { id: payload.templateId, isActive: true, surveyType: SurveyType.EVENT },
       include: { templateQuestions: { orderBy: { sortOrder: "asc" } } },
     });
     if (!template) {
       redirect("/dmu/send?error=template_unavailable");
     }
 
-    const activeClubIds = new Set(
-      (await prisma.club.findMany({ where: { active: true }, select: { id: true } })).map((club) => club.id),
-    );
-    if (parsed.data.events.some((event) => !activeClubIds.has(event.clubId))) {
-      redirect("/dmu/send?error=club_unavailable");
-    }
-
     await prisma.$transaction(async (transaction) => {
-      for (const item of parsed.data.events) {
+      for (const item of payload.events) {
         const eventDate = new Date(`${item.eventDate}T12:00:00.000Z`);
         const sendAt = new Date(item.sendAt);
         const closesAt = new Date(item.closesAt);
@@ -120,18 +198,15 @@ export default async function DmuSendPage() {
         }
 
         await transaction.scheduledSend.create({
-          data: {
-            surveyInstanceId: survey.id,
-            sendAt,
-            status: "PENDING",
-            triggerType: "MANUAL",
-          },
+          data: { surveyInstanceId: survey.id, sendAt, status: "PENDING", triggerType: "MANUAL" },
         });
       }
     });
 
     revalidatePath("/dmu/calendar");
     revalidatePath("/dmu/send");
+    revalidatePath("/dmu/surveys");
+    revalidatePath("/dmu/outbox");
     revalidatePath("/dmu/dashboard");
     redirect("/dmu/calendar?success=events_created");
   }
@@ -140,8 +215,8 @@ export default async function DmuSendPage() {
     <div className="space-y-6">
       <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/75">Udsend spørgeskema</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Opret arrangementer og planlæg udsendelse</h1>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Guiden opretter en event-survey pr. arrangement. Deltagerne uploades senere på arrangementsdagen.</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Planlæg årlige målinger og arrangementsevalueringer</h1>
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Vælg først skabelonen. Årlige målinger sendes til medlemmerne i de valgte klubber, mens arrangementsevalueringer sendes til deltagere på det enkelte arrangement.</p>
       </section>
 
       <SendSurveyWizard
