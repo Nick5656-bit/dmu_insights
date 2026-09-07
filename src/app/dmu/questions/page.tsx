@@ -304,7 +304,6 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
           <div className="text-white/75 [&_h1]:text-white [&_p]:text-white/75">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Spørgsmål & skabeloner</p>
             <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">Standardspørgsmål</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Biblioteket bag skabelonerne.</p>
           </div>
         </div>
       </section>

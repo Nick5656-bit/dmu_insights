@@ -141,7 +141,6 @@ export default async function DmuSurveysPage({ searchParams }: DmuSurveysPagePro
             </span>
             <div className="space-y-2 text-white/75 [&_h1]:text-white [&_p]:text-white/75">
               <h1 className="font-heading text-3xl font-semibold tracking-tight text-foreground md:text-4xl">Overblik på tværs af klubber</h1>
-              <p className="max-w-2xl text-sm text-muted-foreground">Filtrér og følg status på alle spørgeskemaer ét sted.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {activeFilters.length > 0 ? (

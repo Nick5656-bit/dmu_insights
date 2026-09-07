@@ -218,7 +218,6 @@ export default async function DmuSendPage() {
       <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/75">Udsend spørgeskema</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Planlæg årlige målinger og arrangementsevalueringer</h1>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Vælg først skabelonen. Årlige målinger sendes til medlemmerne i de valgte klubber, mens arrangementsevalueringer sendes til deltagere på det enkelte arrangement.</p>
       </section>
 
       <SendSurveyWizard

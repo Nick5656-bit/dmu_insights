@@ -18,7 +18,7 @@ export function PilotSetupForm({ club = false, action }: { club?: boolean; actio
       <label className="text-sm">Administratorens e-mail<input name="email" type="email" autoComplete="off" required maxLength={254} className="mt-1 w-full rounded-lg border p-2" /></label>
       <label className="text-sm sm:col-span-2">Personlig adgangskode<input name="password" type="password" autoComplete="new-password" required minLength={12} maxLength={72} className="mt-1 w-full rounded-lg border p-2" /></label>
     </fieldset>
-    <p className="text-xs text-muted-foreground">Brug en unik adgangskode på mindst 12 tegn. Del den via en sikker kanal, ikke i chatten. Adgangskoden hashes; der sendes ikke automatisk en velkomstmail.</p>
+    <p className="text-xs text-muted-foreground">Brug en unik adgangskode på mindst 12 tegn, og del den sikkert med administratoren. Der sendes ikke en velkomstmail.</p>
     <SubmitButton pendingText="Opretter..." className="rounded-xl bg-primary px-4 py-2 font-medium text-primary-foreground">{club ? "Opret klub og administrator" : "Opret personlig DMU-administrator"}</SubmitButton>
   </form>;
 }

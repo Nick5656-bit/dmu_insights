@@ -183,7 +183,7 @@ export function EventCalendar({ title, description, emptyText, items }: EventCal
           {title ? <h3 className="text-lg font-semibold">{title}</h3> : null}
           {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={showToday}
@@ -213,7 +213,7 @@ export function EventCalendar({ title, description, emptyText, items }: EventCal
         </div>
       </div>
 
-      <div className="mt-5 overflow-x-auto">
+      <div className="mt-5 overflow-x-auto p-1">
         <div className="min-w-[860px]">
           <div className="grid grid-cols-7 gap-2 text-xs uppercase tracking-wide text-muted-foreground">
             {weekdayLabels.map((label) => (
@@ -266,14 +266,14 @@ export function EventCalendar({ title, description, emptyText, items }: EventCal
                   onClick={() => setSelectedDateKey(dateKey)}
                   style={mixedBackgroundStyle}
                   className={cn(
-                    "min-h-24 rounded-xl border p-2.5 text-left transition-colors",
-                    isSelected ? "ring-1 ring-primary shadow-sm" : "",
+                    "flex min-h-24 min-w-0 flex-col rounded-xl border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
+                    isSelected ? "ring-1 ring-inset ring-primary" : "",
                     isToday && !isSelected ? "border-primary/50" : "",
                     dayVisualState === "MIXED" ? "border-emerald-300" : dayToneClass,
                     isClickable ? "hover:brightness-[0.98]" : "cursor-default text-muted-foreground",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex w-full items-center justify-between gap-2">
                     <span className={cn("text-sm font-semibold", isClickable ? "text-foreground" : "text-muted-foreground")}>
                       {day}
                       {isToday ? <span className="ml-1 text-[10px] font-medium text-primary">I dag</span> : null}
@@ -285,7 +285,7 @@ export function EventCalendar({ title, description, emptyText, items }: EventCal
                     ) : null}
                   </div>
 
-                  <div className="mt-2 space-y-1.5">
+                  <div className="mt-2 w-full min-w-0 space-y-1.5">
                     {dayItems.slice(0, 2).map((item) => (
                       <div key={item.id} className="rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5">
                         <p className="truncate text-xs font-medium text-foreground">

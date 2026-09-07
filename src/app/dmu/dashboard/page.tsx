@@ -252,13 +252,14 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
 
-          <label className="text-sm text-white">
-            Udsendelsesår
-            <select name="year" defaultValue={selectedYear ?? "all"} className="h-11 w-full rounded-2xl bg-background px-3 text-foreground">
+          <div className="relative md:col-span-1">
+            <label htmlFor="dashboard-year" className="sr-only">Udsendelsesår</label>
+            <select id="dashboard-year" name="year" defaultValue={selectedYear ?? "all"} className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
               <option value="all">Alle år (ingen klubsammenligning)</option>
               {[...new Set([currentYear, currentYear - 1, currentYear - 2, currentYear - 3, ...(selectedYear ? [selectedYear] : [])])].sort((a, b) => b - a).map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
-          </label>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          </div>
 
           {/* Alder */}
           <div className="relative md:col-span-1">

@@ -270,7 +270,6 @@ export default async function ClubSurveysPage({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Spørgeskemaer</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Åbn, redigér og følg status på klubbens spørgeskemaer.</p>
           </div>
 
           <form method="get" className="flex flex-wrap gap-3">

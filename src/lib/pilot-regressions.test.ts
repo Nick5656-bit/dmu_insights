@@ -30,6 +30,13 @@ for (const role of ["club", "dmu"]) test(`${role} dashboard and real result load
   };
   const page = loadTestModule<Page>(`src/app/${role}/dashboard/page.tsx`, { ...adapters, "@/lib/prisma": { prisma } });
   const tree = await page.default({ searchParams: Promise.resolve({}) });
+  if (role === "dmu") {
+    const year = findElements(tree, "select").find((element) => element.props.name === "year");
+    assert.equal(year?.props.id, "dashboard-year");
+    const label = findElements(tree, "label").find((element) => element.props.htmlFor === "dashboard-year");
+    assert.equal(label?.props.className, "sr-only");
+    assert.ok(String(year?.props.className).includes("h-11"));
+  }
   const panels = findElements(tree, Widget).filter((element) => "results" in element.props);
   assert.equal(panels.length, 1);
   const results = panels[0].props.results as QuestionResult[];

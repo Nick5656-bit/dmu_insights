@@ -202,7 +202,6 @@ export default async function ClubOverviewPage() {
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Senest sendt</p>
             <h3 className="mt-2 text-2xl font-bold">Senest afsendte spørgeskemaer</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Klubbens seneste udsendelser.</p>
           </div>
           <Link href="/club/events" className="rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-95">
             Se arrangementer

@@ -80,30 +80,29 @@ export default async function DmuCalendarPage({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75 [&_article]:rounded-[22px] [&_article]:border-white/12 [&_article]:bg-white/10">
+      <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] px-6 py-4 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75 [&_article]:rounded-2xl [&_article]:border-white/12 [&_article]:bg-white/10">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/75">Arrangementer</p>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">Kalender</h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Følg alle arrangementer og åbn dem for at håndtere deltagerlisten.</p>
+            <h2 className="mt-1 text-3xl font-semibold tracking-tight text-white">Kalender</h2>
           </div>
           <Link href="/dmu/send" className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-primary shadow-sm transition hover:bg-white/92">
             Udsend spørgeskema
           </Link>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <article className="rounded-lg border p-4">
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <article className="rounded-lg border px-4 py-2">
             <p className="text-xs text-muted-foreground">Arrangementer i alt</p>
-            <p className="mt-1 text-2xl font-semibold">{events.length}</p>
+            <p className="text-xl font-semibold">{events.length}</p>
           </article>
-          <article className="rounded-lg border p-4">
+          <article className="rounded-lg border px-4 py-2">
             <p className="text-xs text-muted-foreground">Kommende</p>
-            <p className="mt-1 text-2xl font-semibold">{upcomingCount}</p>
+            <p className="text-xl font-semibold">{upcomingCount}</p>
           </article>
-          <article className="rounded-lg border p-4">
+          <article className="rounded-lg border px-4 py-2">
             <p className="text-xs text-muted-foreground">Deltagere uploadet</p>
-            <p className="mt-1 text-2xl font-semibold">{participantCount}</p>
+            <p className="text-xl font-semibold">{participantCount}</p>
           </article>
         </div>
       </section>
@@ -116,7 +115,6 @@ export default async function DmuCalendarPage({
 
       <EventCalendar
         title="Alle arrangementer"
-        description="Åbn et arrangement i dagsoversigten for at tilføje eller fjerne deltagere."
         items={calendarItems}
         emptyText="Ingen arrangementer på den valgte dag."
       />
