@@ -1,473 +1,175 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { sendSurveyInvitation, sendSurveyReminder } from "@/lib/email";
-import {
-  canScheduleReminder,
-  getReminderScheduledAt,
-  REMINDER_CLOSE_BUFFER_HOURS,
-  shouldSkipSurveyReminder,
-} from "@/lib/reminder-policy";
+import { sendSurveyInvitation } from "@/lib/email";
+import { claimMailDelivery, pauseMailAccount } from "@/lib/mail-budget";
+import { MAIL_WINDOW_MS } from "@/lib/mail-policy";
+import { canScheduleReminder, getReminderScheduledAt, REMINDER_CLOSE_BUFFER_HOURS } from "@/lib/reminder-policy";
 import { decryptSurveyToken } from "@/lib/survey-token";
 
-const MAX_DELIVERY_ATTEMPTS = 5;
-const MAX_REMINDER_ATTEMPTS = 3;
-const DELIVERY_BATCH_SIZE = 200;
-const DELIVERY_CONCURRENCY = 5;
-const STALE_DELIVERY_MINUTES = 15;
-// The platform's current Vercel job runs once daily, so retry windows are
-// intentionally day-based. A more frequent scheduler can use shorter windows later.
-const retryDelaysInMinutes = [24 * 60, 2 * 24 * 60, 4 * 24 * 60, 7 * 24 * 60];
-
-type DeliveryCounters = {
-  candidatesCount: number;
-  attemptedCount: number;
-  deliveredCount: number;
-  retryScheduledCount: number;
-  permanentlyFailedCount: number;
-  skippedClaimedCount: number;
-  legacyFailuresMarkedCount: number;
+type Counters = {
+  candidatesCount: number; attemptedCount: number; deliveredCount: number;
+  retryScheduledCount: number; permanentlyFailedCount: number;
+  skippedClaimedCount: number; skippedCount: number; legacyFailuresMarkedCount: number;
+  quotaDeferredCount: number; reviewCount: number; expiredCount: number;
 };
+export type DeliveryScope = { surveyInstanceIds?: string[]; deadline?: number };
 
-type ReminderCounters = {
-  candidatesCount: number;
-  attemptedCount: number;
-  deliveredCount: number;
-  retryScheduledCount: number;
-  permanentlyFailedCount: number;
-  skippedCount: number;
-  skippedClaimedCount: number;
-};
-
-function subtractMinutes(date: Date, minutes: number) {
-  return new Date(date.getTime() - minutes * 60 * 1000);
+export function emptyDeliveryCounters(): Counters {
+  return { candidatesCount: 0, attemptedCount: 0, deliveredCount: 0, retryScheduledCount: 0,
+    permanentlyFailedCount: 0, skippedClaimedCount: 0, skippedCount: 0, legacyFailuresMarkedCount: 0,
+    quotaDeferredCount: 0, reviewCount: 0, expiredCount: 0 };
 }
 
-function addMinutes(date: Date, minutes: number) {
-  return new Date(date.getTime() + minutes * 60 * 1000);
-}
+async function processQueue(kind: "INITIAL" | "REMINDER", scope: DeliveryScope) {
+  const reminder = kind === "REMINDER";
+  const now = new Date();
+  const deadline = scope.deadline ?? Date.now() + 240_000;
+  // undefined means cron/all; an explicitly empty selection NEVER means all.
+  const whereScope = scope.surveyInstanceIds === undefined ? {} : { surveyInstanceId: { in: scope.surveyInstanceIds } };
+  const counters = emptyDeliveryCounters();
+  const staleBefore = new Date(now.getTime() - 15 * 60_000);
+  const pending: Prisma.SurveyInvitationWhereInput = reminder ? { reminderStatus: "PENDING" } : { deliveryStatus: "PENDING" };
+  const eligibleSurvey: Prisma.SurveyInstanceWhereInput = {
+    status: "SENT",
+    OR: [{ closesAt: null }, { closesAt: { gt: new Date(now.getTime() + (reminder ? REMINDER_CLOSE_BUFFER_HOURS * 3600_000 : 0)) } }],
+  };
 
-function getRetryAt(now: Date, attemptNumber: number) {
-  const delay = retryDelaysInMinutes[Math.min(attemptNumber - 1, retryDelaysInMinutes.length - 1)];
-  return addMinutes(now, delay);
-}
+  // A worker can die after Brevo accepted a message but before the database commit.
+  // Quarantine stale claims instead of automatically sending duplicate invitations.
+  const stale = await prisma.surveyInvitation.updateMany({
+    where: { ...whereScope, ...(reminder
+      ? { reminderStatus: "SENDING", reminderLastAttemptAt: { lte: staleBefore } }
+      : { deliveryStatus: "SENDING", lastDeliveryAttemptAt: { lte: staleBefore } }) },
+    data: reminder
+      ? { reminderStatus: "FAILED", reminderLastError: "Ukendt leveringsstatus efter afbrudt kørsel. Kontrollér Brevo; genudsendes ikke automatisk." }
+      : { deliveryStatus: "FAILED", lastDeliveryError: "Ukendt leveringsstatus efter afbrudt kørsel. Kontrollér Brevo; genudsendes ikke automatisk." },
+  });
+  counters.reviewCount = stale.count;
 
-function errorSummary(message: string) {
-  return message.replace(/[\r\n]+/g, " ").trim().slice(0, 240) || "Ukendt leveringsfejl";
-}
-
-async function processWithConcurrency<T>(items: T[], task: (item: T) => Promise<void>) {
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const item = items[nextIndex];
-      nextIndex += 1;
-      await task(item);
-    }
+  if (!reminder) {
+    const legacy = await prisma.surveyInvitation.updateMany({
+      where: { ...whereScope, deliveryStatus: "PENDING", tokenCiphertext: null, status: { in: ["SENT", "OPENED", "ANSWERED"] }, mailLogs: { none: { status: "FAILED" } } },
+      data: { deliveryStatus: "SENT" },
+    });
+    counters.legacyFailuresMarkedCount = legacy.count;
   }
 
-  await Promise.all(Array.from({ length: Math.min(DELIVERY_CONCURRENCY, items.length) }, worker));
-}
-
-async function markLegacyDeliveryStates() {
-  const [failedWithMailLog, unrecoverableCreated] = await Promise.all([
-    prisma.surveyInvitation.updateMany({
-      where: {
-        tokenCiphertext: null,
-        deliveryStatus: "PENDING",
-        mailLogs: { some: { status: "FAILED" } },
-      },
-      data: {
-        deliveryStatus: "FAILED",
-        lastDeliveryError: "Kan ikke genudsende en historisk invitation uden et krypteret link.",
-      },
-    }),
-    prisma.surveyInvitation.updateMany({
-      where: {
-        tokenCiphertext: null,
-        deliveryStatus: "PENDING",
-        status: "CREATED",
-      },
-      data: {
-        deliveryStatus: "FAILED",
-        lastDeliveryError: "Kan ikke genudsende en historisk invitation uden et krypteret link.",
-      },
-    }),
-  ]);
-
-  await prisma.surveyInvitation.updateMany({
-    where: {
-      tokenCiphertext: null,
-      deliveryStatus: "PENDING",
-      status: { in: ["SENT", "OPENED", "ANSWERED"] },
-    },
-    data: { deliveryStatus: "SENT" },
+  const expired = await prisma.surveyInvitation.updateMany({
+    where: { ...whereScope, ...pending, ...(reminder ? { OR: [{ status: "ANSWERED" }, { surveyInstance: { isNot: eligibleSurvey } }] }
+      : { surveyInstance: { OR: [{ status: "CLOSED" }, { closesAt: { lte: now } }] } }) },
+    data: reminder
+      ? { reminderStatus: "SKIPPED", reminderNextAttemptAt: null, reminderLastError: null }
+      : { deliveryStatus: "FAILED", nextDeliveryAttemptAt: null, lastDeliveryError: "Ikke afsendt: spørgeskemaet lukkede, før invitationen nåede gennem køen." },
   });
-
-  return failedWithMailLog.count + unrecoverableCreated.count;
-}
-
-/**
- * Sends new invitations and retries transient Brevo failures. The individual invitation
- * is claimed atomically, so overlapping cron requests cannot send the same message twice.
- */
-export async function processPendingInvitationDeliveries() {
-  const now = new Date();
-  const staleBefore = subtractMinutes(now, STALE_DELIVERY_MINUTES);
-  const legacyFailuresMarkedCount = await markLegacyDeliveryStates();
+  counters.expiredCount = reminder ? 0 : expired.count;
+  counters.skippedCount = reminder ? expired.count : 0;
 
   const candidates = await prisma.surveyInvitation.findMany({
     where: {
-      status: { in: ["CREATED", "SENT"] },
-      OR: [
-        {
-          deliveryStatus: "PENDING",
-          OR: [{ nextDeliveryAttemptAt: null }, { nextDeliveryAttemptAt: { lte: now } }],
-        },
-        {
-          deliveryStatus: "SENDING",
-          lastDeliveryAttemptAt: { lte: staleBefore },
-        },
-      ],
-      surveyInstance: {
-        status: "SENT",
-        OR: [{ closesAt: null }, { closesAt: { gt: now } }],
-      },
+      ...whereScope, ...pending, surveyInstance: eligibleSurvey,
+      ...(reminder
+        ? { status: { in: ["SENT", "OPENED"] }, deliveryStatus: "SENT", OR: [{ reminderNextAttemptAt: null }, { reminderNextAttemptAt: { lte: now } }] }
+        : { status: { in: ["CREATED", "SENT"] }, OR: [{ nextDeliveryAttemptAt: null }, { nextDeliveryAttemptAt: { lte: now } }] }),
     },
-    select: {
-      id: true,
-      emailSnapshot: true,
-      tokenCiphertext: true,
-      deliveryAttempts: true,
-      surveyInstance: { select: { name: true, closesAt: true } },
-    },
-    orderBy: [{ nextDeliveryAttemptAt: "asc" }, { createdAt: "asc" }],
-    take: DELIVERY_BATCH_SIZE,
+    select: { id: true, emailSnapshot: true, tokenCiphertext: true, deliveryAttempts: true, reminderAttempts: true,
+      surveyInstance: { select: { name: true, closesAt: true, surveyType: true } } },
+    orderBy: reminder ? [{ reminderNextAttemptAt: "asc" }, { createdAt: "asc" }] : [{ createdAt: "asc" }],
+    take: 300,
   });
-
-  const counters: DeliveryCounters = {
-    candidatesCount: candidates.length,
-    attemptedCount: 0,
-    deliveredCount: 0,
-    retryScheduledCount: 0,
-    permanentlyFailedCount: 0,
-    skippedClaimedCount: 0,
-    legacyFailuresMarkedCount,
-  };
-
-  await processWithConcurrency(candidates, async (candidate) => {
-    const claim = await prisma.surveyInvitation.updateMany({
-      where: {
-        id: candidate.id,
-        status: { in: ["CREATED", "SENT"] },
-        OR: [
-          {
-            deliveryStatus: "PENDING",
-            OR: [{ nextDeliveryAttemptAt: null }, { nextDeliveryAttemptAt: { lte: now } }],
-          },
-          {
-            deliveryStatus: "SENDING",
-            lastDeliveryAttemptAt: { lte: staleBefore },
-          },
-        ],
-        surveyInstance: {
-          status: "SENT",
-          OR: [{ closesAt: null }, { closesAt: { gt: now } }],
-        },
-      },
-      data: {
-        deliveryStatus: "SENDING",
-        deliveryAttempts: { increment: 1 },
-        lastDeliveryAttemptAt: now,
-        nextDeliveryAttemptAt: null,
-        lastDeliveryError: null,
-      },
-    });
-
-    if (claim.count === 0) {
-      counters.skippedClaimedCount += 1;
-      return;
-    }
-
-    counters.attemptedCount += 1;
-    const attemptNumber = candidate.deliveryAttempts + 1;
-    const baseMailLog = {
-      surveyInvitationId: candidate.id,
-      toEmail: candidate.emailSnapshot,
-      subject: `Din mening om ${candidate.surveyInstance.name}`,
-      bodyPreview: "Personligt besvarelseslink sendt. Linket gemmes ikke i mailhistorikken.",
-      sentAt: now,
-    };
-
-    let token: string;
-    try {
-      if (!candidate.tokenCiphertext) {
-        throw new Error("Krypteret link mangler");
+  counters.candidatesCount = candidates.length;
+  let next = 0;
+  let stopForQuota = false;
+  async function worker() {
+    while (next < candidates.length && Date.now() < deadline && !stopForQuota) {
+      const candidate = candidates[next++];
+      const attemptAt = new Date();
+      const claim = await claimMailDelivery({
+        ...whereScope, id: candidate.id, ...pending,
+        surveyInstance: { status: "SENT", OR: [{ closesAt: null }, { closesAt: { gt: new Date(attemptAt.getTime() + (reminder ? REMINDER_CLOSE_BUFFER_HOURS * 3600_000 : 0)) } }] },
+        ...(reminder ? { status: { in: ["SENT", "OPENED"] }, deliveryStatus: "SENT",
+          OR: [{ reminderNextAttemptAt: null }, { reminderNextAttemptAt: { lte: attemptAt } }] }
+          : { status: { in: ["CREATED", "SENT"] }, OR: [{ nextDeliveryAttemptAt: null }, { nextDeliveryAttemptAt: { lte: attemptAt } }] }),
+      }, reminder
+        ? { reminderStatus: "SENDING", reminderAttempts: { increment: 1 }, reminderLastAttemptAt: attemptAt, reminderNextAttemptAt: null, reminderLastError: null }
+        : { deliveryStatus: "SENDING", deliveryAttempts: { increment: 1 }, lastDeliveryAttemptAt: attemptAt, nextDeliveryAttemptAt: null, lastDeliveryError: null });
+      if (!claim.claimed) {
+        if (claim.quota) {
+          stopForQuota = true;
+          counters.quotaDeferredCount++;
+          await prisma.surveyInvitation.updateMany({
+            where: { id: candidate.id, ...pending },
+            data: reminder ? { reminderNextAttemptAt: claim.retryAt, reminderLastError: "Afventer ledig mailkvote." }
+              : { nextDeliveryAttemptAt: claim.retryAt, lastDeliveryError: "Afventer ledig mailkvote." },
+          });
+        } else counters.skippedClaimedCount++;
+        continue;
       }
-      token = decryptSurveyToken(candidate.tokenCiphertext);
-    } catch {
-      await prisma.$transaction([
-        prisma.surveyInvitation.update({
+      counters.attemptedCount++;
+      let token: string;
+      try {
+        if (!candidate.tokenCiphertext) throw new Error("Missing token");
+        token = decryptSurveyToken(candidate.tokenCiphertext);
+      } catch {
+        await prisma.surveyInvitation.update({
           where: { id: candidate.id },
-          data: {
-            deliveryStatus: "FAILED",
-            lastDeliveryError: "Krypteret link kunne ikke læses. Invitationen kan ikke genudsende automatisk.",
-          },
-        }),
-        prisma.mailLog.create({ data: { ...baseMailLog, status: "FAILED" } }),
-      ]);
-      counters.permanentlyFailedCount += 1;
-      return;
-    }
+          data: reminder ? { reminderStatus: "FAILED", reminderLastError: "Krypteret link kan ikke læses." }
+            : { deliveryStatus: "FAILED", lastDeliveryError: "Krypteret link kan ikke læses." },
+        });
+        counters.permanentlyFailedCount++;
+        continue;
+      }
 
-    const emailResult = await sendSurveyInvitation({
-      toEmail: candidate.emailSnapshot,
-      surveyName: candidate.surveyInstance.name,
-      token,
-    });
-
-    if (emailResult.success) {
-      const reminderScheduledAt = getReminderScheduledAt(now);
-      const scheduleReminder = canScheduleReminder(candidate.surveyInstance.closesAt, now);
-
-      await prisma.$transaction([
-        prisma.surveyInvitation.update({
-          where: { id: candidate.id },
-          data: {
-            status: "SENT",
-            deliveryStatus: "SENT",
-            sentAt: now,
-            nextDeliveryAttemptAt: null,
-            lastDeliveryError: null,
-            ...(scheduleReminder
-              ? {
-                  reminderStatus: "PENDING",
-                  reminderScheduledAt,
-                  reminderNextAttemptAt: reminderScheduledAt,
-                  reminderLastError: null,
-                }
-              : {}),
-          },
-        }),
-        prisma.mailLog.create({ data: { ...baseMailLog, status: "SENT" } }),
-      ]);
-      counters.deliveredCount += 1;
-      return;
-    }
-
-    const shouldRetry = emailResult.retryable && attemptNumber < MAX_DELIVERY_ATTEMPTS;
-    const failureMessage = errorSummary(emailResult.error);
-    await prisma.$transaction([
-      prisma.surveyInvitation.update({
-        where: { id: candidate.id },
-        data: shouldRetry
-          ? {
-              deliveryStatus: "PENDING",
-              nextDeliveryAttemptAt: getRetryAt(now, attemptNumber),
-              lastDeliveryError: failureMessage,
-            }
-          : {
-              deliveryStatus: "FAILED",
-              nextDeliveryAttemptAt: null,
-              lastDeliveryError: failureMessage,
-            },
-      }),
-      prisma.mailLog.create({ data: { ...baseMailLog, status: "FAILED" } }),
-    ]);
-
-    if (shouldRetry) {
-      counters.retryScheduledCount += 1;
-    } else {
-      counters.permanentlyFailedCount += 1;
-    }
-  });
-
-  return counters;
-}
-
-/**
- * Sends one optional follow-up after a delivered invitation. A reminder is never
- * sent to an answered survey or during the final 24 hours before survey closure.
- */
-export async function processDueSurveyReminders() {
-  const now = new Date();
-  const staleBefore = subtractMinutes(now, STALE_DELIVERY_MINUTES);
-  const closeBufferEnd = new Date(now.getTime() + REMINDER_CLOSE_BUFFER_HOURS * 60 * 60 * 1000);
-
-  const candidates = await prisma.surveyInvitation.findMany({
-    where: {
-      deliveryStatus: "SENT",
-      OR: [
-        {
-          reminderStatus: "PENDING",
-          OR: [{ reminderNextAttemptAt: null }, { reminderNextAttemptAt: { lte: now } }],
-        },
-        {
-          reminderStatus: "SENDING",
-          reminderLastAttemptAt: { lte: staleBefore },
-        },
-      ],
-    },
-    select: {
-      id: true,
-      emailSnapshot: true,
-      tokenCiphertext: true,
-      reminderAttempts: true,
-      status: true,
-      surveyInstance: { select: { name: true, status: true, closesAt: true } },
-    },
-    orderBy: [{ reminderNextAttemptAt: "asc" }, { createdAt: "asc" }],
-    take: DELIVERY_BATCH_SIZE,
-  });
-
-  const counters: ReminderCounters = {
-    candidatesCount: candidates.length,
-    attemptedCount: 0,
-    deliveredCount: 0,
-    retryScheduledCount: 0,
-    permanentlyFailedCount: 0,
-    skippedCount: 0,
-    skippedClaimedCount: 0,
-  };
-
-  await processWithConcurrency(candidates, async (candidate) => {
-    const shouldSkip = shouldSkipSurveyReminder({
-      invitationStatus: candidate.status,
-      surveyStatus: candidate.surveyInstance.status,
-      closesAt: candidate.surveyInstance.closesAt,
-      now,
-    });
-
-    if (shouldSkip) {
-      const skipped = await prisma.surveyInvitation.updateMany({
-        where: {
-          id: candidate.id,
-          reminderStatus: { in: ["PENDING", "SENDING"] },
-        },
-        data: {
-          reminderStatus: "SKIPPED",
-          reminderNextAttemptAt: null,
-          reminderLastError: null,
-        },
+      const result = await sendSurveyInvitation({ kind, toEmail: candidate.emailSnapshot, surveyName: candidate.surveyInstance.name, surveyType: candidate.surveyInstance.surveyType, token });
+      const completedAt = new Date();
+      let data: Prisma.SurveyInvitationUpdateInput;
+      if (result.success) {
+        data = reminder
+          ? { reminderStatus: "SENT", reminderSentAt: completedAt, reminderNextAttemptAt: null, reminderLastError: null }
+          : { deliveryStatus: "SENT", sentAt: completedAt, nextDeliveryAttemptAt: null, lastDeliveryError: null,
+              ...(canScheduleReminder(candidate.surveyInstance.closesAt, completedAt)
+                ? { reminderStatus: "PENDING", reminderScheduledAt: getReminderScheduledAt(completedAt), reminderNextAttemptAt: getReminderScheduledAt(completedAt) } : {}) };
+        counters.deliveredCount++;
+      } else {
+        const accountPaused = result.quotaBlocked || result.accountBlocked;
+        const attempts = (reminder ? candidate.reminderAttempts : candidate.deliveryAttempts) + 1;
+        const retry = !result.uncertain && (accountPaused || (result.retryable && attempts < (reminder ? 3 : 5)));
+        const retryAt = new Date(completedAt.getTime() + (accountPaused ? MAIL_WINDOW_MS : Math.min(2 ** (attempts - 1), 7) * MAIL_WINDOW_MS));
+        const error = result.error.replace(/[\r\n]/g, " ").slice(0, 240);
+        if (accountPaused) {
+          await pauseMailAccount(retryAt);
+          stopForQuota = true;
+          counters.quotaDeferredCount++;
+        }
+        data = reminder
+          ? { reminderStatus: retry ? "PENDING" : "FAILED", reminderNextAttemptAt: retry ? retryAt : null, reminderLastError: error,
+              ...(accountPaused ? { reminderAttempts: { decrement: 1 } } : {}) }
+          : { deliveryStatus: retry ? "PENDING" : "FAILED", nextDeliveryAttemptAt: retry ? retryAt : null, lastDeliveryError: error,
+              ...(accountPaused ? { deliveryAttempts: { decrement: 1 } } : {}) };
+        if (retry) counters.retryScheduledCount++;
+        else if (result.uncertain) counters.reviewCount++;
+        else counters.permanentlyFailedCount++;
+      }
+      await prisma.$transaction(async (tx) => {
+        await tx.surveyInvitation.update({ where: { id: candidate.id }, data });
+        // Never overwrite OPENED/ANSWERED when the recipient responded unusually fast.
+        if (result.success && !reminder) await tx.surveyInvitation.updateMany({ where: { id: candidate.id, status: "CREATED" }, data: { status: "SENT" } });
+        await tx.mailLog.create({ data: {
+          surveyInvitationId: candidate.id, toEmail: candidate.emailSnapshot,
+          subject: `${reminder ? "Påmindelse: " : ""}Din mening om ${candidate.surveyInstance.name}`,
+          bodyPreview: result.success ? "Accepteret af mailudbyderen. Det personlige link gemmes ikke i historikken." : "Afsendelsen blev ikke bekræftet. Se invitationens status.",
+          sentAt: attemptAt, status: result.success ? "SENT" : "FAILED", quotaTracked: true,
+        } });
       });
-      counters.skippedCount += skipped.count;
-      return;
     }
-
-    const claim = await prisma.surveyInvitation.updateMany({
-      where: {
-        id: candidate.id,
-        status: { in: ["SENT", "OPENED"] },
-        deliveryStatus: "SENT",
-        OR: [
-          {
-            reminderStatus: "PENDING",
-            OR: [{ reminderNextAttemptAt: null }, { reminderNextAttemptAt: { lte: now } }],
-          },
-          {
-            reminderStatus: "SENDING",
-            reminderLastAttemptAt: { lte: staleBefore },
-          },
-        ],
-        surveyInstance: {
-          status: "SENT",
-          OR: [{ closesAt: null }, { closesAt: { gt: closeBufferEnd } }],
-        },
-      },
-      data: {
-        reminderStatus: "SENDING",
-        reminderAttempts: { increment: 1 },
-        reminderLastAttemptAt: now,
-        reminderNextAttemptAt: null,
-        reminderLastError: null,
-      },
-    });
-
-    if (claim.count === 0) {
-      counters.skippedClaimedCount += 1;
-      return;
-    }
-
-    counters.attemptedCount += 1;
-    const attemptNumber = candidate.reminderAttempts + 1;
-    const baseMailLog = {
-      surveyInvitationId: candidate.id,
-      toEmail: candidate.emailSnapshot,
-      subject: `Påmindelse: Din mening om ${candidate.surveyInstance.name}`,
-      bodyPreview: "En enkelt påmindelse med det personlige besvarelseslink er sendt.",
-      sentAt: now,
-    };
-
-    let token: string;
-    try {
-      if (!candidate.tokenCiphertext) {
-        throw new Error("Krypteret link mangler");
-      }
-      token = decryptSurveyToken(candidate.tokenCiphertext);
-    } catch {
-      await prisma.$transaction([
-        prisma.surveyInvitation.update({
-          where: { id: candidate.id },
-          data: {
-            reminderStatus: "FAILED",
-            reminderNextAttemptAt: null,
-            reminderLastError: "Det krypterede link til paamindelsen kunne ikke laeses.",
-          },
-        }),
-        prisma.mailLog.create({ data: { ...baseMailLog, status: "FAILED" } }),
-      ]);
-      counters.permanentlyFailedCount += 1;
-      return;
-    }
-
-    const emailResult = await sendSurveyReminder({
-      toEmail: candidate.emailSnapshot,
-      surveyName: candidate.surveyInstance.name,
-      token,
-    });
-
-    if (emailResult.success) {
-      await prisma.$transaction([
-        prisma.surveyInvitation.update({
-          where: { id: candidate.id },
-          data: {
-            reminderStatus: "SENT",
-            reminderSentAt: now,
-            reminderNextAttemptAt: null,
-            reminderLastError: null,
-          },
-        }),
-        prisma.mailLog.create({ data: { ...baseMailLog, status: "SENT" } }),
-      ]);
-      counters.deliveredCount += 1;
-      return;
-    }
-
-    const shouldRetry = emailResult.retryable && attemptNumber < MAX_REMINDER_ATTEMPTS;
-    const failureMessage = errorSummary(emailResult.error);
-    await prisma.$transaction([
-      prisma.surveyInvitation.update({
-        where: { id: candidate.id },
-        data: shouldRetry
-          ? {
-              reminderStatus: "PENDING",
-              reminderNextAttemptAt: getRetryAt(now, attemptNumber),
-              reminderLastError: failureMessage,
-            }
-          : {
-              reminderStatus: "FAILED",
-              reminderNextAttemptAt: null,
-              reminderLastError: failureMessage,
-            },
-      }),
-      prisma.mailLog.create({ data: { ...baseMailLog, status: "FAILED" } }),
-    ]);
-
-    if (shouldRetry) {
-      counters.retryScheduledCount += 1;
-    } else {
-      counters.permanentlyFailedCount += 1;
-    }
-  });
-
+  }
+  await Promise.all(Array.from({ length: Math.min(5, candidates.length) }, () => worker()));
   return counters;
+}
+
+export function processPendingInvitationDeliveries(scope: DeliveryScope = {}) {
+  return processQueue("INITIAL", scope);
+}
+
+export function processDueSurveyReminders(scope: DeliveryScope = {}) {
+  return processQueue("REMINDER", scope);
 }

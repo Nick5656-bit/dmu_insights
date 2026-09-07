@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { QuestionDistributionTile } from "@/components/charts/question-distribution-tile";
 
 type BenchmarkRow = {
+  questionId: string;
+  questionType: "SCALE_1_5" | "SINGLE_CHOICE" | "TEXT";
   questionTitle: string;
   category: string;
   avg: number | null;
@@ -128,7 +130,8 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
                 <div className={`grid gap-4 ${hasMultipleRows ? "md:grid-cols-2" : ""}`}>
                   {categoryRows.map((row) => (
                     <QuestionDistributionTile
-                      key={row.questionTitle}
+                      key={row.questionId}
+                      questionType={row.questionType}
                       title={row.questionTitle}
                       category={row.category}
                       avg={row.avg}

@@ -19,7 +19,7 @@ function subtractYears(date: Date, years: number) {
 
 /**
  * Removes contact data after 90 days while retaining non-identifying delivery
- * totals. Fully anonymised survey responses are removed after three years.
+ * totals. Survey responses (including potentially identifying free text) are removed after three years.
  */
 export async function processDataRetention() {
   const now = new Date();
@@ -45,7 +45,6 @@ export async function processDataRetention() {
   ]);
 
   const surveyIds = surveysDueForRedaction.map((survey) => survey.id);
-  const eventIds = surveysDueForRedaction.flatMap((survey) => (survey.eventId ? [survey.eventId] : []));
   const responseSurveyIds = surveysDueForResponseDeletion.map((survey) => survey.id);
 
   let mailLogsDeleted = 0;
@@ -53,7 +52,7 @@ export async function processDataRetention() {
   let eventParticipantsDeleted = 0;
 
   if (surveyIds.length > 0) {
-    const [mailLogs, invitations, participants] = await prisma.$transaction([
+    const [mailLogs, invitations] = await prisma.$transaction([
       prisma.mailLog.deleteMany({
         where: { surveyInvitation: { surveyInstanceId: { in: surveyIds } } },
       }),
@@ -71,15 +70,18 @@ export async function processDataRetention() {
           reminderLastError: null,
         },
       }),
-      prisma.eventParticipant.deleteMany({
-        where: { eventId: { in: eventIds } },
-      }),
     ]);
 
     mailLogsDeleted = mailLogs.count;
     invitationsRedacted = invitations.count;
-    eventParticipantsDeleted = participants.count;
   }
+
+  // An event list may serve several surveys. Keep it until ALL have closed and
+  // passed retention, including when an earlier survey was already redacted.
+  const participants = await prisma.eventParticipant.deleteMany({
+    where: { event: { surveyInstances: { some: {}, every: { status: "CLOSED", closesAt: { not: null, lte: piiCutoff } } } } },
+  });
+  eventParticipantsDeleted = participants.count;
 
   const responsesDeleted = responseSurveyIds.length
     ? await prisma.surveyResponse.deleteMany({

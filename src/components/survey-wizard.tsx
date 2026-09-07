@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { nextStepIndex, parseSurveySubmission, type SubmissionResult } from "@/lib/survey-submission";
 import { DmuLogo } from "@/components/dmu-logo";
 import { LoadingSpinner } from "@/components/submit-button";
 import { roleNeedsMotocrossClass } from "@/lib/survey-segments";
@@ -32,10 +34,18 @@ export type WizardStep =
 
 type Props = {
   steps: WizardStep[];
-  submitAction: (formData: FormData) => Promise<void>;
+  submitAction: (formData: FormData) => Promise<SubmissionResult>;
 };
 
 export function SurveyWizard({ steps, submitAction }: Props) {
+  const router = useRouter();
+  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const submitting = useRef(false);
+  function cancelAutoAdvance() {
+    if (autoAdvanceTimer.current !== null) clearTimeout(autoAdvanceTimer.current);
+    autoAdvanceTimer.current = null;
+  }
+  useEffect(() => () => cancelAutoAdvance(), []);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [segmentAnswers, setSegmentAnswers] = useState<Partial<Record<SegmentKey, string>>>({});
@@ -78,6 +88,8 @@ export function SurveyWizard({ steps, submitAction }: Props) {
       : 0;
 
   function advance() {
+    cancelAutoAdvance();
+    if (submitting.current) return;
     if (current.kind === "QUESTION") {
       const answer = answers[current.questionId];
       if (current.required && !answer?.trim()) {
@@ -92,28 +104,35 @@ export function SurveyWizard({ steps, submitAction }: Props) {
     }
 
     setError(null);
-    setCurrentIndex((index) => Math.min(index + 1, visibleSteps.length - 1));
+    setCurrentIndex((index) => nextStepIndex(index, safeCurrentIndex, visibleSteps.length));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function goBack() {
+    cancelAutoAdvance();
+    if (submitting.current) return;
     setError(null);
-    setCurrentIndex((index) => Math.max(index - 1, 0));
+    setCurrentIndex(Math.max(safeCurrentIndex - 1, 0));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function setAnswer(questionId: string, value: string, autoAdvance = false) {
+    cancelAutoAdvance();
+    if (submitting.current) return;
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
     setError(null);
     if (autoAdvance && !isLast) {
-      setTimeout(() => {
-        setCurrentIndex((i) => i + 1);
+      autoAdvanceTimer.current = setTimeout(() => {
+        autoAdvanceTimer.current = null;
+        setCurrentIndex((index) => nextStepIndex(index, safeCurrentIndex, visibleSteps.length));
         window.scrollTo({ top: 0, behavior: "smooth" });
       }, 400);
     }
   }
 
   function setSegmentAnswer(segment: SegmentKey, value: string) {
+    cancelAutoAdvance();
+    if (submitting.current) return;
     setSegmentAnswers((previous) => ({
       ...previous,
       [segment]: value,
@@ -125,38 +144,36 @@ export function SurveyWizard({ steps, submitAction }: Props) {
   }
 
   function submit() {
-    if (current.kind === "QUESTION") {
-      const answer = answers[current.questionId];
-      if (current.required && !answer?.trim()) {
-        setError("Du skal besvare dette spørgsmål for at indsende.");
-        return;
-      }
-    }
-
-    if (!segmentAnswers.respondentAgeGroup || !segmentAnswers.respondentRole) {
-      setError("Udfyld venligst de korte baggrundsspørgsmål først.");
-      return;
-    }
-
-    if (
-      roleNeedsMotocrossClass(segmentAnswers.respondentRole as "RIDER" | "SIDECAR_PASSENGER") &&
-      !segmentAnswers.motocrossClass
-    ) {
-      setError("Vælg venligst din primære motocrossklasse.");
-      return;
-    }
-
+    cancelAutoAdvance();
+    if (submitting.current) return;
     const formData = new FormData();
     for (const [questionId, value] of Object.entries(answers)) {
       formData.set(`question_${questionId}`, value);
     }
-    formData.set("segment_respondentAgeGroup", segmentAnswers.respondentAgeGroup);
-    formData.set("segment_respondentRole", segmentAnswers.respondentRole);
+    formData.set("segment_respondentAgeGroup", segmentAnswers.respondentAgeGroup ?? "");
+    formData.set("segment_respondentRole", segmentAnswers.respondentRole ?? "");
     if (segmentAnswers.motocrossClass) {
       formData.set("segment_motocrossClass", segmentAnswers.motocrossClass);
     }
+    const parsed = parseSurveySubmission(formData, steps.flatMap((step) => step.kind === "QUESTION"
+      ? [{ questionId: step.questionId, required: step.required, question: { questionType: step.questionType, options: step.options } }] : []));
+    const showError = (result: { error: string; questionId?: string; segment?: string }) => {
+      setError(result.error);
+      const index = visibleSteps.findIndex((step) => step.kind === "QUESTION" ? step.questionId === result.questionId : step.kind === "SEGMENT" && step.segment === result.segment);
+      if (index >= 0) setCurrentIndex(index);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    if ("error" in parsed) { showError(parsed); return; }
+    setError(null);
+    submitting.current = true;
     startTransition(async () => {
-      await submitAction(formData);
+      try {
+        const result = await submitAction(formData);
+        if (result.success) router.replace("/thank-you");
+        else showError(result);
+      } catch {
+        setError("Vi kunne ikke bekræfte, at svarene blev gemt. Kontrollér forbindelsen og prøv igen. Dine indtastninger er bevaret her.");
+      } finally { submitting.current = false; }
     });
   }
 
@@ -264,6 +281,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
                         <button
                           key={option.value}
                           type="button"
+                          disabled={isPending}
                           onClick={() => setSegmentAnswer(current.segment, option.value)}
                           className={[
                             "w-full rounded-2xl border-2 px-4 py-4 text-left text-sm font-medium transition-all active:scale-[0.98]",
@@ -312,6 +330,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
                           <button
                             key={value}
                             type="button"
+                            disabled={isPending}
                             onClick={() => setAnswer(current.questionId, String(value), true)}
                             className={[
                               "h-16 rounded-2xl border-2 text-xl font-bold transition-all active:scale-95",
@@ -363,6 +382,8 @@ export function SurveyWizard({ steps, submitAction }: Props) {
                     onChange={(e) => setAnswer(current.questionId, e.target.value)}
                     placeholder="Skriv dit svar her..."
                     rows={5}
+                    maxLength={5000}
+                    disabled={isPending}
                     className="w-full resize-none rounded-2xl border border-border/70 bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
                   />
                 )}
@@ -372,7 +393,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
             </div>
           )}
 
-          {error && <p className="mt-5 text-sm font-medium text-destructive">{error}</p>}
+          {error && <p role="alert" className="mt-5 text-sm font-medium text-destructive">{error}</p>}
 
         </div>
       </main>
@@ -411,7 +432,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
           )}
         </div>
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          Dine svar er anonyme og behandles fortroligt.
+          Dine svar behandles fortroligt. Undlad navne og andre personoplysninger i tekstsvar.
         </p>
       </footer>
     </div>

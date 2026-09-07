@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { editUnusedQuestion, deleteUnusedQuestion, copyQuestion, type QuestionEditResult } from "@/lib/question-editing";
 import { QuestionEditCard } from "./question-edit-card";
 import { QuestionCreateForm } from "./question-create-form";
 
@@ -139,7 +140,7 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
             ? { benchmarkKey: { startsWith: `${selectedCategoryFilter}_` } }
             : {}),
       },
-      include: { options: { orderBy: { sortOrder: "asc" } } },
+      include: { options: { orderBy: { sortOrder: "asc" } }, _count: { select: { instanceQuestions: true, answers: true } } },
       orderBy:
         selectedSort === "oldest"
           ? [{ createdAt: "asc" }]
@@ -240,7 +241,7 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
     revalidatePath("/dmu/questions");
   }
 
-  async function editQuestionAction(formData: FormData) {
+  async function editQuestionAction(formData: FormData): Promise<QuestionEditResult> {
     "use server";
     await requireRole("DMU_ADMIN");
 
@@ -256,7 +257,7 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
     });
 
     if (!parsed.success) {
-      return;
+      return { error: "Kontrollér spørgsmålet og svarmulighederne, og prøv igen." };
     }
 
     const data = parsed.data;
@@ -270,71 +271,29 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
         : [];
 
     if (data.questionType === "SINGLE_CHOICE" && options.length < 2) {
-      return;
+      return { error: "Kontrollér spørgsmålet og svarmulighederne, og prøv igen." };
     }
 
-    // Update question
-    await prisma.question.update({
-      where: { id: data.questionId },
-      data: {
-        title: data.title,
-        description: data.description || null,
-        questionType: data.questionType,
-        benchmarkKey: buildBenchmarkKey(resolvedBenchmarkCategory, data.benchmarkCode ?? "", data.title),
-      },
-    });
-
-    // Delete and recreate options
-    await prisma.questionOption.deleteMany({
-      where: { questionId: data.questionId },
-    });
-
-    if (options.length > 0) {
-      await prisma.questionOption.createMany({
-        data: options.map((label, index) => ({
-          questionId: data.questionId,
-          label,
-          value: label.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, ""),
-          sortOrder: index + 1,
-        })),
-      });
-    }
-
+    const result = await editUnusedQuestion(data.questionId, { scope: "DMU_STANDARD" }, {
+      title: data.title, description: data.description || null, questionType: data.questionType,
+      benchmarkKey: data.questionType === "SCALE_1_5" ? buildBenchmarkKey(resolvedBenchmarkCategory, data.benchmarkCode ?? "", data.title) : null,
+    }, options);
+    if (result.error) return result;
     revalidatePath("/dmu/questions");
+    return {};
   }
 
   async function deleteQuestionAction(questionId: string) {
     "use server";
     await requireRole("DMU_ADMIN");
+    await deleteUnusedQuestion(questionId, { scope: "DMU_STANDARD" });
+    revalidatePath("/dmu/questions");
+  }
 
-    if (!questionId) {
-      throw new Error("Question ID is required");
-    }
-
-    // Check if question is used in templates
-    const usageCount = await prisma.surveyTemplateQuestion.count({
-      where: { questionId },
-    });
-
-    // Also check if it's used in any survey instances
-    const instanceUsageCount = await prisma.surveyInstanceQuestion.count({
-      where: { questionId },
-    });
-
-    if (usageCount > 0 || instanceUsageCount > 0) {
-      throw new Error("Spørgsmålet bruges allerede i skabeloner eller surveys. Fjern det fra disse først.");
-    }
-
-    // Delete options first (due to FK constraint)
-    await prisma.questionOption.deleteMany({
-      where: { questionId },
-    });
-
-    // Delete question
-    await prisma.question.delete({
-      where: { id: questionId },
-    });
-
+  async function copyQuestionAction(questionId: string) {
+    "use server";
+    await requireRole("DMU_ADMIN");
+    await copyQuestion(questionId, { scope: "DMU_STANDARD" });
     revalidatePath("/dmu/questions");
   }
 
@@ -398,8 +357,10 @@ export default async function DmuQuestionsPage({ searchParams }: DmuQuestionsPag
             <QuestionEditCard
               key={question.id}
               question={question}
+              isLocked={question._count.instanceQuestions > 0 || question._count.answers > 0}
               benchmarkCategoryOptions={benchmarkCategoryOptions}
               onEdit={editQuestionAction}
+                onCopy={copyQuestionAction}
               onDelete={deleteQuestionAction}
               onToggleActive={toggleQuestionActiveAction}
             />

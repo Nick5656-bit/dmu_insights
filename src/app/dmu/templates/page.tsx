@@ -1,9 +1,10 @@
-import { SurveyType } from "@prisma/client";
+import { Prisma, SurveyType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { lockUnusedTemplate, TEMPLATE_LOCKED_MESSAGE } from "@/lib/template-editing";
 import { DetachedSubmitButton, SubmitButton } from "@/components/submit-button";
 import { TemplateStructureEditor } from "./template-structure-editor";
 import { TemplateCreatedNotice } from "./template-created-notice";
@@ -68,6 +69,7 @@ type DmuTemplatesPageProps = {
   searchParams: Promise<{
     benchmarkCategory?: string;
     created?: string;
+    notice?: string;
   }>;
 };
 
@@ -212,15 +214,18 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
       return;
     }
 
-    await prisma.surveyTemplate.update({
-      where: { id: parsed.data.templateId },
-      data: {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        surveyType: parsed.data.surveyType,
-      },
-    });
-
+    try {
+      await prisma.$transaction(async (tx) => {
+        await lockUnusedTemplate(tx, parsed.data.templateId);
+        await tx.surveyTemplate.update({
+          where: { id: parsed.data.templateId },
+          data: { name: parsed.data.name, description: parsed.data.description, surveyType: parsed.data.surveyType },
+        });
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === TEMPLATE_LOCKED_MESSAGE) redirect("/dmu/templates?notice=locked");
+      throw error;
+    }
     revalidatePath("/dmu/templates");
   }
 
@@ -246,6 +251,23 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
     });
 
     revalidatePath("/dmu/templates");
+  }
+
+  async function copyTemplateAction(formData: FormData) {
+    "use server";
+    await requireRole("DMU_ADMIN");
+    const templateId = String(formData.get("templateId") ?? "");
+    const copied = await prisma.$transaction(async (tx) => {
+      const source = await tx.surveyTemplate.findUnique({ where: { id: templateId }, include: { templateQuestions: true } });
+      if (!source) throw new Error("Skabelonen findes ikke længere.");
+      return tx.surveyTemplate.create({ data: {
+        name: `${source.name} (kopi)`, description: source.description, surveyType: source.surveyType, isActive: false,
+        layoutJson: source.layoutJson === null ? Prisma.DbNull : source.layoutJson as Prisma.InputJsonValue,
+        templateQuestions: { create: source.templateQuestions.map(({ questionId, sortOrder, required, isCoreBenchmarkQuestion }) => ({ questionId, sortOrder, required, isCoreBenchmarkQuestion })) },
+      } });
+    });
+    revalidatePath("/dmu/templates");
+    redirect(`/dmu/templates?created=${copied.id}`);
   }
 
   async function toggleTemplateAvailabilityAction(formData: FormData) {
@@ -323,6 +345,7 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
     let sortOrder = 1;
     try {
       await prisma.$transaction(async (transaction) => {
+        await lockUnusedTemplate(transaction, parsedPayload.data.templateId);
         await transaction.surveyTemplateQuestion.deleteMany({
           where: {
             surveyTemplateId: parsedPayload.data.templateId,
@@ -379,6 +402,7 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
         });
       });
     } catch (error) {
+      if (error instanceof Error && error.message === TEMPLATE_LOCKED_MESSAGE) return { status: "error" as const, message: TEMPLATE_LOCKED_MESSAGE };
       console.error("[templates] Kunne ikke gemme skabelonstruktur", error);
       return { status: "error" as const, message: "Kunne ikke gemme ændringerne. Prøv igen." };
     }
@@ -389,6 +413,7 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
 
   return (
     <div className="space-y-6">
+      {params.notice === "locked" && <p role="alert" className="rounded-xl border p-4">{TEMPLATE_LOCKED_MESSAGE}</p>}
       <section className="rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)] [&_p.text-muted-foreground]:text-white/75">
         <div>
           <div className="text-white/75 [&_h1]:text-white [&_p]:text-white/75">
@@ -511,7 +536,13 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
               </summary>
 
               <div className="mt-4 space-y-2 border-t pt-4">
-                <form action={updateTemplateAction} className="grid gap-3 md:grid-cols-2">
+                {template._count.surveyInstances > 0 && <p className="rounded-lg bg-muted p-3 text-sm">{TEMPLATE_LOCKED_MESSAGE} Spørgsmål i kopien er stadig fælles: kopiér også et spørgsmål i spørgsmålsbanken, hvis selve teksten skal ændres.</p>}
+                <form action={copyTemplateAction}>
+                  <input type="hidden" name="templateId" value={template.id} />
+                  <SubmitButton pendingText="Kopierer..." className="rounded-md border px-3 py-2 text-sm">Opret kopi</SubmitButton>
+                </form>
+                <form action={updateTemplateAction}>
+                  <fieldset disabled={template._count.surveyInstances > 0} className="grid gap-3 md:grid-cols-2 disabled:opacity-60">
                   <input type="hidden" name="templateId" value={template.id} />
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-xs font-medium text-muted-foreground" htmlFor={`template-name-${template.id}`}>
@@ -556,9 +587,13 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
                       Gem skabelon
                     </SubmitButton>
                   </div>
+                  </fieldset>
                 </form>
 
+                <fieldset disabled={template._count.surveyInstances > 0} className="disabled:opacity-60">
                 <TemplateStructureEditor
+                    key={template.id}
+                    readOnly={template._count.surveyInstances > 0}
                     templateId={template.id}
                     initialItems={(() => {
                       const parsedLayout = layoutJsonSchema.safeParse(template.layoutJson);
@@ -628,6 +663,7 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
                     }))}
                     saveAction={saveTemplateStructureAction}
                 />
+                </fieldset>
 
                 <div className="flex flex-wrap items-center gap-2 border-t pt-3">
                   <form action={toggleTemplateAvailabilityAction}>

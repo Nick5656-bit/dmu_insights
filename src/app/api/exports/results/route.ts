@@ -2,9 +2,10 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loadSurveyResults } from "@/lib/survey-results.server";
+import { resultsCsv, surveyYearWhere } from "@/lib/survey-results";
 import { isMotocrossClass, isRespondentAgeGroup, isRespondentRole } from "@/lib/survey-segments";
 
-const SUPPRESSION_THRESHOLD = 5;
 
 function parseClubIds(rawValue: string | null) {
   if (!rawValue) {
@@ -12,18 +13,6 @@ function parseClubIds(rawValue: string | null) {
   }
 
   return [...new Set(rawValue.split(",").map((value) => value.trim()).filter(Boolean))];
-}
-
-function csvCell(value: string | number) {
-  const rawText = String(value);
-  // Avoid spreadsheet formula execution when an administrator-created label starts with a formula character.
-  const text = /^[=+\-@]/.test(rawText.trimStart()) ? `'${rawText}` : rawText;
-  return /[;"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function formatCategory(benchmarkKey: string | null) {
-  const category = benchmarkKey?.split("_")[0] ?? "GENEREL";
-  return `${category.charAt(0)}${category.slice(1).toLowerCase()}`;
 }
 
 export async function GET(request: Request) {
@@ -56,7 +45,9 @@ export async function GET(request: Request) {
     if (surveyInstanceId) {
       responseWhere.surveyInstanceId = surveyInstanceId;
     }
-    exportScope = "Klubbens valgte udsnit";
+    const club = await prisma.club.findUnique({ where: { id: session.clubId }, select: { isTest: true } });
+    if (!club) return NextResponse.json({ error: "Club not found" }, { status: 403 });
+    exportScope = `${club.isTest ? "TESTDATA" : "PILOTDATA"} – Klubbens valgte udsnit`;
   } else {
     const selectedClubIds = parseClubIds(searchParams.get("clubIds"));
     if (selectedClubIds.length > 0) {
@@ -78,59 +69,24 @@ export async function GET(request: Request) {
     }
   }
 
-  const questions = await prisma.question.findMany({
-    where: {
-      scope: "DMU_STANDARD",
-      benchmarkKey: { not: null },
-      questionType: "SCALE_1_5",
-    },
-    select: { id: true, title: true, benchmarkKey: true },
-    orderBy: { createdAt: "asc" },
-  });
-
-  const answers = await prisma.surveyAnswer.findMany({
-    where: {
-      questionId: { in: questions.map((question) => question.id) },
-      numericValue: { not: null },
-      surveyResponse: responseWhere,
-    },
-    select: { questionId: true, numericValue: true },
-  });
-
-  const answersByQuestion = new Map<string, number[]>();
-  for (const answer of answers) {
-    if (answer.numericValue === null) {
-      continue;
-    }
-    answersByQuestion.set(answer.questionId, [...(answersByQuestion.get(answer.questionId) ?? []), answer.numericValue]);
+  if (session.role !== "DMU_ADMIN" && session.role !== "CLUB_ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-
-  const rows = [
-    ["DMU Survey Platform - samlet resultateksport"],
-    ["Udsnit", exportScope],
-    ["Anonymitetsregel", `Resultater med under ${SUPPRESSION_THRESHOLD} svar er skjult`],
-    [],
-    ["Kategori", "Spørgsmål", "Status", "Svar", "Gennemsnit", "Score 1", "Score 2", "Score 3", "Score 4", "Score 5"],
-    ...questions.map((question) => {
-      const values = answersByQuestion.get(question.id) ?? [];
-      if (values.length < SUPPRESSION_THRESHOLD) {
-        return [formatCategory(question.benchmarkKey), question.title, "Skjult af anonymitet", "", "", "", "", "", "", ""];
-      }
-
-      const distribution = [1, 2, 3, 4, 5].map((score) => values.filter((value) => value === score).length);
-      const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-      return [
-        formatCategory(question.benchmarkKey),
-        question.title,
-        "Vises",
-        values.length,
-        average.toFixed(2),
-        ...distribution,
-      ];
-    }),
-  ];
-
-  const csv = `\uFEFF${rows.map((row) => row.map((cell) => csvCell(cell ?? "")).join(";")).join("\r\n")}\r\n`;
+  const instanceWhere: Prisma.SurveyInstanceWhereInput = session.role === "CLUB_ADMIN"
+    ? { clubId: session.clubId!, ...(surveyInstanceId ? { id: surveyInstanceId } : {}) }
+    : {
+        ...(surveyTemplateId ? { surveyTemplateId } : {}),
+        ...(parseClubIds(searchParams.get("clubIds")).length ? { clubId: { in: parseClubIds(searchParams.get("clubIds")) } } : {}),
+      };
+  if (session.role === "DMU_ADMIN") {
+    instanceWhere.club = { isTest: searchParams.get("dataMode") === "test" };
+    exportScope = `${searchParams.get("dataMode") === "test" ? "TESTDATA" : "PILOTDATA"} – ${exportScope}`;
+    const year = searchParams.get("year");
+    if (year !== "all") Object.assign(instanceWhere, surveyYearWhere(year && /^\d{4}$/.test(year) ? Number(year) : new Date().getUTCFullYear()));
+  }
+  responseWhere.surveyInstance = instanceWhere;
+  const results = await loadSurveyResults(responseWhere, instanceWhere);
+  const csv = resultsCsv(results, exportScope);
   const filename = `dmu-resultater-${new Date().toISOString().slice(0, 10)}.csv`;
 
   return new NextResponse(csv, {

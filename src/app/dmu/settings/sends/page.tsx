@@ -179,7 +179,7 @@ export default async function TidligereUdsendelsePage({ searchParams }: Props) {
         <div className="mt-5 space-y-3">
           {!shouldShow ? (
             <div className="rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-              Vælg mindst én klub og tryk "Vis udsendelser".
+              Vælg mindst én klub og tryk &quot;Vis udsendelser&quot;.
             </div>
           ) : selectedClubIds.length === 0 ? (
             <div className="rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">

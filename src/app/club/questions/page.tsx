@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { editUnusedQuestion, deleteUnusedQuestion, copyQuestion, type QuestionEditResult } from "@/lib/question-editing";
 import { ClubQuestionCreateForm } from "./club-question-create-form";
 import { ClubQuestionEditCard } from "./club-question-edit-card";
 
@@ -40,11 +41,11 @@ export default async function ClubQuestionsPage() {
 
   // Get custom questions created by this club
   const customQuestions = await prisma.question.findMany({
-    where: { 
+    where: {
       scope: "CLUB_CUSTOM",
       createdByClubId: session.clubId
     },
-    include: { 
+    include: {
       options: { orderBy: { sortOrder: "asc" } },
       _count: {
         select: {
@@ -93,45 +94,6 @@ export default async function ClubQuestionsPage() {
     ANNUAL: "Årlig",
     EVENT: "Arrangement",
   } as const;
-
-  // Get survey instances that have used any custom questions from this club
-  const surveysWithCustomQuestions = await prisma.surveyInstance.findMany({
-    where: { 
-      clubId: session.clubId,
-      surveyInstanceQuestions: {
-        some: {
-          question: {
-            scope: "CLUB_CUSTOM",
-            createdByClubId: session.clubId
-          }
-        }
-      }
-    },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      createdAt: true,
-      surveyInstanceQuestions: {
-        where: {
-          question: {
-            scope: "CLUB_CUSTOM",
-            createdByClubId: session.clubId
-          }
-        },
-        select: {
-          questionId: true
-        }
-      }
-    }
-  });
-
-  // Map sent survey IDs for easy lookup
-  const sentSurveyIds = new Set(
-    surveysWithCustomQuestions
-      .filter(s => s.status === "SENT")
-      .flatMap(s => s.surveyInstanceQuestions.map(sq => sq.questionId))
-  );
 
   async function createQuestionAction(formData: FormData) {
     "use server";
@@ -189,22 +151,22 @@ export default async function ClubQuestionsPage() {
     revalidatePath("/club/questions");
   }
 
-  async function editQuestionAction(formData: FormData) {
+  async function editQuestionAction(formData: FormData): Promise<QuestionEditResult> {
     "use server";
     const currentSession = await requireRole("CLUB_ADMIN");
     if (!currentSession.clubId) {
-      return;
+      return { error: "Kontrollér spørgsmålet og svarmulighederne, og prøv igen." };
     }
 
     const questionId = String(formData.get("questionId") ?? "");
-    
+
     // Verify question belongs to this club
     const question = await prisma.question.findUnique({
       where: { id: questionId }
     });
 
     if (!question || question.createdByClubId !== currentSession.clubId) {
-      return;
+      return { error: "Kontrollér spørgsmålet og svarmulighederne, og prøv igen." };
     }
 
     const parsed = editQuestionSchema.safeParse({
@@ -216,7 +178,7 @@ export default async function ClubQuestionsPage() {
     });
 
     if (!parsed.success) {
-      return;
+      return { error: "Kontrollér spørgsmålet og svarmulighederne, og prøv igen." };
     }
 
     const data = parsed.data;
@@ -229,64 +191,31 @@ export default async function ClubQuestionsPage() {
         : [];
 
     if (data.questionType === "SINGLE_CHOICE" && options.length < 2) {
-      return;
+      return { error: "Kontrollér spørgsmålet og svarmulighederne, og prøv igen." };
     }
 
-    // Update question
-    await prisma.question.update({
-      where: { id: data.questionId },
-      data: {
-        title: data.title,
-        description: data.description || null,
-        questionType: data.questionType,
-      },
-    });
+    const result = await editUnusedQuestion(data.questionId, { scope: "CLUB_CUSTOM", createdByClubId: currentSession.clubId }, {
+      title: data.title, description: data.description || null, questionType: data.questionType,
 
-    // Delete and recreate options
-    await prisma.questionOption.deleteMany({
-      where: { questionId: data.questionId },
-    });
-
-    if (options.length > 0) {
-      await prisma.questionOption.createMany({
-        data: options.map((label, index) => ({
-          questionId: data.questionId,
-          label,
-          value: label.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_|_$/g, ""),
-          sortOrder: index + 1,
-        })),
-      });
-    }
-
+    }, options);
+    if (result.error) return result;
     revalidatePath("/club/questions");
+    return {};
   }
 
   async function deleteQuestionAction(questionId: string) {
     "use server";
     const currentSession = await requireRole("CLUB_ADMIN");
-    if (!currentSession.clubId) {
-      return;
-    }
+    if (!currentSession.clubId) throw new Error("Brugeren mangler klubtilknytning.");
+    await deleteUnusedQuestion(questionId, { scope: "CLUB_CUSTOM", createdByClubId: currentSession.clubId });
+    revalidatePath("/club/questions");
+  }
 
-    // Verify question belongs to this club
-    const question = await prisma.question.findUnique({
-      where: { id: questionId }
-    });
-
-    if (!question || question.createdByClubId !== currentSession.clubId) {
-      return;
-    }
-
-    // Delete options first (due to FK constraint)
-    await prisma.questionOption.deleteMany({
-      where: { questionId },
-    });
-
-    // Delete question
-    await prisma.question.delete({
-      where: { id: questionId },
-    });
-
+  async function copyQuestionAction(questionId: string) {
+    "use server";
+    const currentSession = await requireRole("CLUB_ADMIN");
+    if (!currentSession.clubId) throw new Error("Brugeren mangler klubtilknytning.");
+    await copyQuestion(questionId, { scope: "CLUB_CUSTOM", createdByClubId: currentSession.clubId });
     revalidatePath("/club/questions");
   }
 
@@ -312,8 +241,9 @@ export default async function ClubQuestionsPage() {
               <ClubQuestionEditCard
                 key={question.id}
                 question={question}
-                isLocked={sentSurveyIds.has(question.id)}
+                isLocked={question._count.instanceQuestions > 0}
                 onEdit={editQuestionAction}
+                onCopy={copyQuestionAction}
                 onDelete={deleteQuestionAction}
               />
             ))}

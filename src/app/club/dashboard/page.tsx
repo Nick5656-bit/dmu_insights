@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
 import { BenchmarkBarChart } from "@/components/charts/benchmark-bar-chart";
-import { QuestionDistributionBoard } from "@/components/charts/question-distribution-board";
-import { TextResponsesModal } from "@/components/text-responses-modal";
+import { SurveyResultsPanel } from "@/components/survey-results-panel";
+import { loadSurveyResults } from "@/lib/survey-results.server";
+import { SUPPRESSION_THRESHOLD, buildQuestionBenchmarks, responseRate, surveyYearWhere } from "@/lib/survey-results";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -11,29 +12,10 @@ import {
   dashboardRespondentRoleOptions,
 } from "@/lib/survey-segments";
 
-const SUPPRESSION_THRESHOLD = 5;
-
-const benchmarkCategoryLabels: Record<string, string> = {
-  SATISFACTION: "Tilfredshed",
-  COMMUNITY: "Fællesskab",
-  RECOMMENDATION: "Anbefaling",
-  SAFETY: "Sikkerhed",
-  ACTIVITY: "Aktivitetsudbytte",
-  JOIN: "Motivation",
-  CHURN: "Fastholdelse",
-  DMU: "DMU centralt",
-  GENEREL: "Generel",
-};
-
 const dashboardLinks = [
   { href: "/club/overview", label: "Overblik" },
   { href: "/club/events", label: "Arrangementer" },
 ];
-
-function formatBenchmarkCategory(value: string) {
-  const normalized = value.trim().toUpperCase();
-  return benchmarkCategoryLabels[normalized] ?? `${normalized.charAt(0)}${normalized.slice(1).toLowerCase()}`;
-}
 
 type ClubDashboardProps = {
   searchParams: Promise<{
@@ -41,6 +23,7 @@ type ClubDashboardProps = {
     motocrossClass?: string;
     respondentRole?: string;
     surveyInstanceId?: string;
+    textQuestionId?: string;
   }>;
 };
 
@@ -57,10 +40,13 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     );
   }
 
+  const club = await prisma.club.findUnique({ where: { id: session.clubId }, select: { isTest: true } });
+  if (!club) return <p role="alert">Klubben findes ikke.</p>;
   const availableSurveys = await prisma.surveyInstance.findMany({
     where: { clubId: session.clubId },
     select: {
       id: true,
+      surveyTemplateId: true,
       name: true,
       status: true,
       sentAt: true,
@@ -72,6 +58,9 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
   const selectedSurvey = availableSurveys.find((s) => s.id === params.surveyInstanceId);
   const selectedSurveyId = selectedSurvey?.id;
+  if (params.surveyInstanceId && !selectedSurvey) {
+    return <p role="alert">Spørgeskemaet findes ikke i din klub. <Link href="/club/dashboard">Nulstil filteret</Link>.</p>;
+  }
 
   const respondentAgeGroupFilter = dashboardRespondentAgeGroupOptions.some((option) => option.value === params.respondentAgeGroup)
     ? (params.respondentAgeGroup as RespondentAgeGroup)
@@ -91,98 +80,32 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
   };
 
-  const benchmarkResponseWhere = {
-    ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
-    ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
-    ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
-  };
-
-  const [members, surveys, ownResponsesCount, benchmarkResponsesCount, benchmarkQuestions] = await Promise.all([
+  const ownInstanceWhere = { clubId: session.clubId, ...(selectedSurveyId ? { id: selectedSurveyId } : {}) };
+  const comparisonYear = (selectedSurvey?.sentAt ?? selectedSurvey?.createdAt)?.getUTCFullYear();
+  const comparisonInstanceWhere = selectedSurvey && comparisonYear
+    ? { club: { isTest: club.isTest }, clubId: { not: session.clubId }, surveyTemplateId: selectedSurvey.surveyTemplateId, ...surveyYearWhere(comparisonYear) }
+    : null;
+  const [members, surveys, ownResponsesCount, distributionRows, comparisonResults, sentInvitations, allResponsesCount] = await Promise.all([
     prisma.member.count({ where: { clubId: session.clubId, active: true } }),
     prisma.surveyInstance.count({ where: { clubId: session.clubId } }),
     prisma.surveyResponse.count({ where: ownResponseWhere }),
-    prisma.surveyResponse.count({ where: benchmarkResponseWhere }),
-    prisma.question.findMany({
-      where: { scope: "DMU_STANDARD", benchmarkKey: { not: null }, questionType: "SCALE_1_5" },
-      orderBy: { createdAt: "asc" },
-    }),
+    loadSurveyResults(ownResponseWhere, ownInstanceWhere),
+    comparisonInstanceWhere ? loadSurveyResults({
+      surveyInstance: comparisonInstanceWhere,
+      ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
+      ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
+      ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
+    }, comparisonInstanceWhere) : Promise.resolve([]),
+    prisma.surveyInvitation.count({ where: { surveyInstance: ownInstanceWhere, deliveryStatus: "SENT" } }),
+    prisma.surveyResponse.count({ where: { surveyInstance: ownInstanceWhere } }),
   ]);
-
   const canShowOwnSegment = ownResponsesCount >= SUPPRESSION_THRESHOLD;
-  const canShowBenchmarkSegment = benchmarkResponsesCount >= SUPPRESSION_THRESHOLD;
-
-  const benchmarkRows: { label: string; own: number; benchmark: number }[] = [];
-  const categoryBenchmarks = new Map<string, { ownWeightedSum: number; ownCount: number; benchmarkWeightedSum: number; benchmarkCount: number }>();
-  const distributionRows: {
-    questionTitle: string;
-    category: string;
-    avg: number | null;
-    count: number;
-    suppressed: boolean;
-    distribution: { label: string; value: number }[];
-  }[] = [];
-
-  for (const question of benchmarkQuestions) {
-    const [ownAgg, benchmarkAgg, ownNumericAnswers] = await Promise.all([
-      prisma.surveyAnswer.aggregate({
-        where: { questionId: question.id, numericValue: { not: null }, surveyResponse: ownResponseWhere },
-        _count: { numericValue: true },
-        _avg: { numericValue: true },
-      }),
-      prisma.surveyAnswer.aggregate({
-        where: { questionId: question.id, numericValue: { not: null }, surveyResponse: benchmarkResponseWhere },
-        _count: { numericValue: true },
-        _avg: { numericValue: true },
-      }),
-      prisma.surveyAnswer.findMany({
-        where: { questionId: question.id, numericValue: { not: null }, surveyResponse: ownResponseWhere },
-        select: { numericValue: true },
-      }),
-    ]);
-
-    const ownCount = ownNumericAnswers.length;
-    const rawCategory = question.benchmarkKey ? question.benchmarkKey.split("_")[0] : "GENEREL";
-    const category = formatBenchmarkCategory(rawCategory);
-    const distribution = [1, 2, 3, 4, 5].map((v) => ({
-      label: String(v),
-      value: ownNumericAnswers.filter((a) => a.numericValue === v).length,
-    }));
-
-    distributionRows.push({
-      questionTitle: question.title,
-      category,
-      avg: ownAgg._avg.numericValue ? Number(ownAgg._avg.numericValue.toFixed(2)) : null,
-      count: ownCount,
-      suppressed: ownCount < SUPPRESSION_THRESHOLD,
-      distribution,
-    });
-
-    if (ownAgg._avg.numericValue && benchmarkAgg._avg.numericValue) {
-      const current = categoryBenchmarks.get(rawCategory) ?? { ownWeightedSum: 0, ownCount: 0, benchmarkWeightedSum: 0, benchmarkCount: 0 };
-      categoryBenchmarks.set(rawCategory, {
-        ownWeightedSum: current.ownWeightedSum + Number(ownAgg._avg.numericValue) * ownAgg._count.numericValue,
-        ownCount: current.ownCount + ownAgg._count.numericValue,
-        benchmarkWeightedSum: current.benchmarkWeightedSum + Number(benchmarkAgg._avg.numericValue) * benchmarkAgg._count.numericValue,
-        benchmarkCount: current.benchmarkCount + benchmarkAgg._count.numericValue,
-      });
-    }
-  }
-
-  if (canShowOwnSegment && canShowBenchmarkSegment) {
-    for (const [rawCategory, values] of Array.from(categoryBenchmarks.entries()).sort(([a], [b]) => a.localeCompare(b, "da"))) {
-      if (values.ownCount === 0 || values.benchmarkCount === 0) continue;
-      benchmarkRows.push({
-        label: formatBenchmarkCategory(rawCategory),
-        own: Number((values.ownWeightedSum / values.ownCount).toFixed(2)),
-        benchmark: Number((values.benchmarkWeightedSum / values.benchmarkCount).toFixed(2)),
-      });
-    }
-  }
-
-  const overallOwn = benchmarkRows.length > 0 ? benchmarkRows.reduce((s, r) => s + r.own, 0) / benchmarkRows.length : null;
-  const overallBenchmark = benchmarkRows.length > 0 ? benchmarkRows.reduce((s, r) => s + r.benchmark, 0) / benchmarkRows.length : null;
-  const delta = overallOwn && overallBenchmark ? overallOwn - overallBenchmark : null;
-  const responseCoverage = members > 0 ? Math.min((ownResponsesCount / members) * 100, 100) : 0;
+  const benchmarkRows = buildQuestionBenchmarks(distributionRows, comparisonResults);
+  const overallOwn = benchmarkRows.length ? benchmarkRows.reduce((sum, row) => sum + row.own, 0) / benchmarkRows.length : null;
+  const overallBenchmark = benchmarkRows.length ? benchmarkRows.reduce((sum, row) => sum + row.benchmark, 0) / benchmarkRows.length : null;
+  const delta = overallOwn !== null && overallBenchmark !== null ? overallOwn - overallBenchmark : null;
+  // Segment data is supplied only when answering, so a segment-specific invitation denominator is unknown.
+  const responseCoverage = responseRate(allResponsesCount, sentInvitations);
 
   const activeFilters = [
     selectedSurvey ? `Spørgeskema: ${selectedSurvey.name}` : undefined,
@@ -191,32 +114,14 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     respondentRoleFilter ? `Rolle: ${dashboardRespondentRoleOptions.find((option) => option.value === respondentRoleFilter)?.label}` : undefined,
   ].filter(Boolean) as string[];
 
-  const dmuImprovementQuestion = await prisma.question.findFirst({
-    where: { benchmarkKey: "DMU_CENTRAL_IMPROVEMENT", scope: "DMU_STANDARD" },
-  });
-
-  const clubImprovementAnswers =
-    dmuImprovementQuestion && canShowOwnSegment
-      ? await prisma.surveyAnswer.findMany({
-          where: { questionId: dmuImprovementQuestion.id, textValue: { not: null }, surveyResponse: ownResponseWhere },
-          include: { surveyResponse: { select: { submittedAt: true } } },
-          orderBy: { surveyResponse: { submittedAt: "desc" } },
-        })
-      : [];
-
-  const clubImprovementResponses = clubImprovementAnswers.map((a) => ({
-    text: a.textValue!,
-    submittedAt: a.surveyResponse.submittedAt.toISOString(),
-  }));
-
   const summaryCards = [
     { label: "Besvarelser", value: ownResponsesCount, hint: "I valgt udsnit" },
     { label: "Medlemmer", value: members, hint: "Aktive medlemmer" },
-    { label: "Dækning", value: `${responseCoverage.toFixed(0)}%`, hint: "Svar mod medlemstal" },
+    { label: "Svarprocent", value: responseCoverage === null ? "—" : `${responseCoverage}%`, hint: "Alle svar / sendte invitationer (uden segmentfiltre)" },
     { label: "Spørgeskemaer", value: surveys, hint: "Alle oprettede" },
   ];
 
-  const canRenderBenchmark = canShowOwnSegment && canShowBenchmarkSegment && benchmarkRows.length > 0;
+  const canRenderBenchmark = benchmarkRows.length > 0;
   const exportParams = new URLSearchParams();
   if (selectedSurveyId) exportParams.set("surveyInstanceId", selectedSurveyId);
   if (respondentAgeGroupFilter) exportParams.set("respondentAgeGroup", respondentAgeGroupFilter);
@@ -226,6 +131,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
   return (
     <div className="space-y-6">
+      {club.isTest ? <p role="status" className="rounded-2xl border bg-muted/20 p-4 text-sm">Testklub: Disse resultater er testdata og sammenlignes kun med andre testklubber.</p> : null}
       {/* ── Filterpanel ─────────────────────────────────────────────────── */}
       <section className="overflow-visible rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
 
@@ -347,10 +253,10 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Benchmark</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Jeres gennemsnit mod samlet niveau pr. kategori.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Jeres gennemsnit pr. spørgsmål mod andre klubber med samme skabelon og udsendelsesår. Begge grupper skal have mindst fem svar pr. spørgsmål.</p>
             </div>
             <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-              {benchmarkRows.length} kategorier
+              {benchmarkRows.length} spørgsmål
             </span>
           </div>
           <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
@@ -358,7 +264,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
               <BenchmarkBarChart data={benchmarkRows} />
             ) : (
               <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-                Benchmark kan ikke vises for det valgte udsnit endnu.
+                {selectedSurvey ? "Der er endnu ikke nok svar til en sammenligning." : "Vælg et spørgeskema for at sammenligne samme skabelon og udsendelsesår."}
               </div>
             )}
           </div>
@@ -388,80 +294,22 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
             </div>
             <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Svargrundlag</p>
-                <span className="text-sm font-semibold text-foreground">{benchmarkResponsesCount}</span>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Egne svar i udsnittet</p>
+                <span className="text-sm font-semibold text-foreground">{ownResponsesCount}</span>
               </div>
               <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Dækning</p>
-                <span className="text-sm font-semibold text-foreground">{responseCoverage.toFixed(0)}%</span>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Svarprocent uden segmentfiltre</p>
+                <span className="text-sm font-semibold text-foreground">{responseCoverage === null ? "—" : `${responseCoverage}%`}</span>
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${responseCoverage}%` }} />
+                <div className="h-full rounded-full bg-primary" style={{ width: `${responseCoverage ?? 0}%` }} />
               </div>
             </div>
           </div>
         </article>
       </section>
 
-      {/* ── Spørgsmålsfordeling ──────────────────────────────────────────── */}
-      <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Spørgsmålsfordeling</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Find hurtigt de spørgsmål, der skiller sig ud.</p>
-          </div>
-          <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-            {distributionRows.length} spørgsmål
-          </span>
-        </div>
-        <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
-          <QuestionDistributionBoard rows={distributionRows} suppressionThreshold={SUPPRESSION_THRESHOLD} />
-        </div>
-      </section>
-
-      {/* ── Åbne svar ────────────────────────────────────────────────────── */}
-      {dmuImprovementQuestion ? (
-        <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Åbne svar</p>
-              <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground">{dmuImprovementQuestion.title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {canShowOwnSegment ? "Seneste kommentarer fra klubben." : `Kræver mindst ${SUPPRESSION_THRESHOLD} svar.`}
-              </p>
-            </div>
-            {canShowOwnSegment ? (
-              <div className="flex items-center gap-3">
-                <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-                  {clubImprovementResponses.length} svar
-                </span>
-                <TextResponsesModal questionTitle={dmuImprovementQuestion.title} responses={clubImprovementResponses} triggerLabel="Se alle" />
-              </div>
-            ) : null}
-          </div>
-
-          <div className="mt-5">
-            {!canShowOwnSegment ? (
-              <div className="rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-                <p className="font-medium text-foreground/70">Ingen resultater endnu</p>
-                <p className="mt-1">Åbne svar vises, når der er mindst {SUPPRESSION_THRESHOLD} svar.</p>
-              </div>
-            ) : clubImprovementResponses.length > 0 ? (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {clubImprovementResponses.slice(0, 2).map((response, index) => (
-                  <article key={`${response.submittedAt}-${index}`} className="rounded-[22px] border border-border/70 bg-background/85 p-4">
-                    <p className="text-sm leading-6 text-foreground">{response.text}</p>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-                Ingen åbne svar i det valgte udsnit.
-              </div>
-            )}
-          </div>
-        </section>
-      ) : null}
+      <SurveyResultsPanel results={distributionRows} textQuestionId={params.textQuestionId} />
     </div>
   );
 }

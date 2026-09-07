@@ -1,231 +1,91 @@
-import { processDueSurveyReminders, processPendingInvitationDeliveries } from "@/lib/invitation-delivery";
+import { emptyDeliveryCounters, processDueSurveyReminders, processPendingInvitationDeliveries } from "@/lib/invitation-delivery";
 import { prisma } from "@/lib/prisma";
 import { createSurveyToken, encryptSurveyToken, hashSurveyToken } from "@/lib/survey-token";
 
-const STALE_SCHEDULED_SEND_MINUTES = 15;
-
-function subtractMinutes(date: Date, minutes: number) {
-  return new Date(date.getTime() - minutes * 60 * 1000);
+// Preparing a schedule is one transaction: partial lists and overlapping clicks cannot duplicate it.
+async function prepareScheduledSend(id: string) {
+  return prisma.$transaction(async (tx) => {
+    // Also lock the survey: legacy data can contain several schedules for one survey.
+    await tx.$queryRaw`SELECT s.id FROM "SurveyInstance" s
+      JOIN "ScheduledSend" d ON d."surveyInstanceId" = s.id
+      WHERE d.id = ${id} FOR UPDATE OF s, d`;
+    const now = new Date();
+    const schedule = await tx.scheduledSend.findFirst({
+      where: { id, status: "PENDING", sendAt: { lte: now },
+        surveyInstance: { status: "SCHEDULED", OR: [{ closesAt: null }, { closesAt: { gt: now } }] } },
+      include: { surveyInstance: { include: { invitations: { select: { emailSnapshot: true } } } } },
+    });
+    if (!schedule) return { processed: false, empty: false, created: 0 };
+    const survey = schedule.surveyInstance;
+    const recipients: { email: string; memberId?: string; eventParticipantId?: string }[] = [];
+    if (survey.surveyType === "EVENT") {
+      if (survey.eventId) {
+        const participants = await tx.eventParticipant.findMany({ where: { eventId: survey.eventId }, select: { id: true, email: true } });
+        recipients.push(...participants.map((p) => ({ email: p.email, eventParticipantId: p.id })));
+      }
+    } else {
+      const [members, extra] = await Promise.all([
+        tx.member.findMany({ where: { clubId: survey.clubId, active: true }, select: { id: true, email: true } }),
+        tx.clubExtraEmail.findMany({ where: { clubId: survey.clubId, active: true }, select: { email: true } }),
+      ]);
+      recipients.push(...members.map((m) => ({ email: m.email, memberId: m.id })), ...extra);
+    }
+    if (!recipients.length) return { processed: false, empty: true, created: 0 };
+    const existing = new Set(survey.invitations.map((invitation) => invitation.emailSnapshot.toLowerCase().trim()));
+    const invitations = [];
+    for (const recipient of recipients) {
+      const email = recipient.email.trim().toLowerCase();
+      if (existing.has(email)) continue;
+      existing.add(email);
+      const token = createSurveyToken();
+      invitations.push({ surveyInstanceId: survey.id, emailSnapshot: email, memberId: recipient.memberId,
+        eventParticipantId: recipient.eventParticipantId, token: hashSurveyToken(token), tokenCiphertext: encryptSurveyToken(token) });
+    }
+    if (invitations.length) await tx.surveyInvitation.createMany({ data: invitations });
+    await tx.surveyInstance.update({ where: { id: survey.id }, data: { status: "SENT", sentAt: survey.sentAt ?? now } });
+    await tx.scheduledSend.update({ where: { id }, data: { status: "PROCESSED", processedAt: now, processingStartedAt: null } });
+    return { processed: true, empty: false, created: invitations.length };
+  }, { timeout: 20_000 });
 }
 
 export async function processDueScheduledSends(selectedScheduledSendIds?: string[]) {
   const now = new Date();
-  const staleBefore = subtractMinutes(now, STALE_SCHEDULED_SEND_MINUTES);
-  const selectedIds = selectedScheduledSendIds?.filter(Boolean) ?? [];
-
-  const closedCount = await prisma.surveyInstance.updateMany({
-    where: {
-      status: "SENT",
-      closesAt: { lte: now },
-    },
-    data: { status: "CLOSED" },
-  });
-
-  const dueSends = await prisma.scheduledSend.findMany({
-    where: {
-      status: "PENDING",
-      sendAt: { lte: now },
-      OR: [{ processingStartedAt: null }, { processingStartedAt: { lte: staleBefore } }],
-      ...(selectedIds.length > 0 ? { id: { in: selectedIds } } : {}),
-      surveyInstance: {
-        status: "SCHEDULED",
-        OR: [{ closesAt: null }, { closesAt: { gt: now } }],
-      },
-    },
-    include: {
-      surveyInstance: {
-        include: {
-          invitations: true,
-        },
-      },
-    },
+  const deadline = Date.now() + 240_000;
+  // Explicit [] is deliberately fail-closed. Only cron omits the argument.
+  const manual = selectedScheduledSendIds !== undefined;
+  const ids = [...new Set(selectedScheduledSendIds?.filter(Boolean) ?? [])];
+  const schedules = await prisma.scheduledSend.findMany({
+    where: manual ? { id: { in: ids } } : { status: "PENDING", sendAt: { lte: now } },
+    select: { id: true, surveyInstanceId: true, status: true, sendAt: true },
     orderBy: { sendAt: "asc" },
   });
-
-  let processedCount = 0;
-  let invitationsCreated = 0;
-  let skippedNoParticipantsCount = 0;
-  let scheduleFailuresCount = 0;
-
-  for (const scheduledSend of dueSends) {
-    const claim = await prisma.scheduledSend.updateMany({
-      where: {
-        id: scheduledSend.id,
-        status: "PENDING",
-        OR: [{ processingStartedAt: null }, { processingStartedAt: { lte: staleBefore } }],
-      },
-      data: { processingStartedAt: now },
-    });
-
-    if (claim.count === 0) {
-      continue;
-    }
-
-    const surveyInstance = scheduledSend.surveyInstance;
-
+  const surveyInstanceIds = manual ? [...new Set(schedules.map((s) => s.surveyInstanceId))] : undefined;
+  const scope = { surveyInstanceIds, deadline };
+  const closed = await prisma.surveyInstance.updateMany({
+    where: { ...(manual ? { id: { in: surveyInstanceIds } } : {}), status: { in: ["SENT", "SCHEDULED"] }, closesAt: { lte: now } },
+    data: { status: "CLOSED" },
+  });
+  let processedCount = 0, invitationsCreated = 0, skippedNoParticipantsCount = 0, scheduleFailuresCount = 0;
+  for (const schedule of schedules) {
+    if (Date.now() >= deadline - 25_000) break;
+    if (schedule.status !== "PENDING" || schedule.sendAt > now) continue;
     try {
-      const existingInvitationEmails = new Set(
-        surveyInstance.invitations.map((invitation) => invitation.emailSnapshot.trim().toLowerCase())
-      );
-
-      if (surveyInstance.surveyType === "EVENT") {
-        if (!surveyInstance.eventId) {
-          skippedNoParticipantsCount += 1;
-          await prisma.scheduledSend.update({
-            where: { id: scheduledSend.id },
-            data: { processingStartedAt: null },
-          });
-          continue;
-        }
-
-        const participants = await prisma.eventParticipant.findMany({
-          where: { eventId: surveyInstance.eventId },
-          select: { id: true, email: true },
-        });
-
-        // A due event survey stays pending until its event-specific participant list is ready.
-        if (participants.length === 0) {
-          skippedNoParticipantsCount += 1;
-          await prisma.scheduledSend.update({
-            where: { id: scheduledSend.id },
-            data: { processingStartedAt: null },
-          });
-          continue;
-        }
-
-        const existingInvitationParticipantIds = new Set(
-          surveyInstance.invitations
-            .map((invitation) => invitation.eventParticipantId)
-            .filter((id): id is string => Boolean(id))
-        );
-
-        for (const participant of participants) {
-          if (existingInvitationParticipantIds.has(participant.id)) {
-            continue;
-          }
-
-          const normalizedEmail = participant.email.trim().toLowerCase();
-          if (existingInvitationEmails.has(normalizedEmail)) {
-            continue;
-          }
-
-          const token = createSurveyToken();
-          await prisma.surveyInvitation.create({
-            data: {
-              surveyInstanceId: surveyInstance.id,
-              eventParticipantId: participant.id,
-              emailSnapshot: normalizedEmail,
-              token: hashSurveyToken(token),
-              tokenCiphertext: encryptSurveyToken(token),
-            },
-          });
-
-          invitationsCreated += 1;
-          existingInvitationParticipantIds.add(participant.id);
-          existingInvitationEmails.add(normalizedEmail);
-        }
-      } else {
-        const [members, extraEmails] = await Promise.all([
-          prisma.member.findMany({
-            where: { clubId: surveyInstance.clubId, active: true },
-            select: { id: true, email: true },
-          }),
-          prisma.clubExtraEmail.findMany({
-            where: { clubId: surveyInstance.clubId, active: true },
-            select: { email: true },
-          }),
-        ]);
-
-        const existingInvitationMemberIds = new Set(
-          surveyInstance.invitations.map((invitation) => invitation.memberId).filter((id): id is string => Boolean(id))
-        );
-
-        for (const member of members) {
-          if (existingInvitationMemberIds.has(member.id)) {
-            continue;
-          }
-
-          const normalizedEmail = member.email.trim().toLowerCase();
-          if (existingInvitationEmails.has(normalizedEmail)) {
-            continue;
-          }
-
-          const token = createSurveyToken();
-          await prisma.surveyInvitation.create({
-            data: {
-              surveyInstanceId: surveyInstance.id,
-              memberId: member.id,
-              emailSnapshot: normalizedEmail,
-              token: hashSurveyToken(token),
-              tokenCiphertext: encryptSurveyToken(token),
-            },
-          });
-
-          invitationsCreated += 1;
-          existingInvitationMemberIds.add(member.id);
-          existingInvitationEmails.add(normalizedEmail);
-        }
-
-        for (const extraEmail of extraEmails) {
-          const normalizedEmail = extraEmail.email.trim().toLowerCase();
-          if (existingInvitationEmails.has(normalizedEmail)) {
-            continue;
-          }
-
-          const token = createSurveyToken();
-          await prisma.surveyInvitation.create({
-            data: {
-              surveyInstanceId: surveyInstance.id,
-              emailSnapshot: normalizedEmail,
-              token: hashSurveyToken(token),
-              tokenCiphertext: encryptSurveyToken(token),
-            },
-          });
-
-          invitationsCreated += 1;
-          existingInvitationEmails.add(normalizedEmail);
-        }
-      }
-
-      await prisma.$transaction([
-        prisma.surveyInstance.update({
-          where: { id: surveyInstance.id },
-          data: {
-            status: "SENT",
-            sentAt: surveyInstance.sentAt ?? now,
-          },
-        }),
-        prisma.scheduledSend.update({
-          where: { id: scheduledSend.id },
-          data: {
-            status: "PROCESSED",
-            processedAt: now,
-            processingStartedAt: null,
-          },
-        }),
-      ]);
-
-      processedCount += 1;
-    } catch (error) {
-      console.error(`[scheduled-sends] Kunne ikke klargøre udsendelse ${scheduledSend.id}`, error);
-      await prisma.scheduledSend.update({
-        where: { id: scheduledSend.id },
-        data: { processingStartedAt: null },
-      });
-      scheduleFailuresCount += 1;
+      const result = await prepareScheduledSend(schedule.id);
+      if (result.processed) processedCount++;
+      if (result.empty) skippedNoParticipantsCount++;
+      invitationsCreated += result.created;
+    } catch {
+      // No recipient data, access tokens or database connection details in application logs.
+      console.error("[scheduled-sends] Klargøring fejlede; hele transaktionen er rullet tilbage.");
+      scheduleFailuresCount++;
     }
   }
-
-  const delivery = await processPendingInvitationDeliveries();
-  const reminders = await processDueSurveyReminders();
-
-  return {
-    closedCount: closedCount.count,
-    processedCount,
-    invitationsCreated,
-    skippedNoParticipantsCount,
-    scheduleFailuresCount,
-    delivery,
-    reminders,
-  };
+  const delivery = await processPendingInvitationDeliveries(scope);
+  // A manual click sends selected initial invitations/retries only, never unrelated reminders.
+  const reminders = manual ? emptyDeliveryCounters() : await processDueSurveyReminders(scope);
+  const remainingCount = await prisma.surveyInvitation.count({
+    where: { ...(manual ? { surveyInstanceId: { in: surveyInstanceIds } } : {}), deliveryStatus: { in: ["PENDING", "SENDING"] }, surveyInstance: { status: "SENT" } },
+  });
+  return { closedCount: closed.count, processedCount, invitationsCreated, skippedNoParticipantsCount,
+    scheduleFailuresCount, delivery, reminders, remainingCount };
 }

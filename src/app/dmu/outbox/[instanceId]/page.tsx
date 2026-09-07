@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const mailStatusLabel: Record<string, string> = {
-  SENT: "Sendt",
+  SENT: "Accepteret af Brevo",
   FAILED: "Fejlet",
 };
 
@@ -55,9 +55,9 @@ export default async function DmuOutboxDetailPage({ params }: { params: Promise<
     orderBy: { sentAt: "desc" },
   });
 
-  const sentCount = mailLogs.length;
+  const sentCount = mailLogs.filter((log) => log.status === "SENT").length;
   const failedCount = mailLogs.filter((l) => l.status === "FAILED").length;
-  const answeredCount = mailLogs.filter((l) => l.surveyInvitation.status === "ANSWERED").length;
+  const answeredCount = new Set(mailLogs.filter((log) => log.surveyInvitation.status === "ANSWERED").map((log) => log.surveyInvitationId)).size;
 
   return (
     <div className="space-y-6">
@@ -65,7 +65,7 @@ export default async function DmuOutboxDetailPage({ params }: { params: Promise<
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-semibold">{surveyInstance.name}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Klub: {surveyInstance.club.name}</p>
+            <p className="mt-2 text-sm text-muted-foreground">Klub: {surveyInstance.club.name}{surveyInstance.club.isTest ? " · TEST" : ""}</p>
           </div>
           <Link href="/dmu/settings/sends" className="rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
             ← Tilbage til oversigt
@@ -74,7 +74,7 @@ export default async function DmuOutboxDetailPage({ params }: { params: Promise<
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <article className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Sendte mails</p>
+            <p className="text-xs text-muted-foreground">Accepterede mails (inkl. påmindelser)</p>
             <p className="text-lg font-semibold">{sentCount}</p>
           </article>
           <article className="rounded-md border p-3">

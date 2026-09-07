@@ -6,23 +6,26 @@ import { prisma } from "@/lib/prisma";
 import { DmuDeliveryTabs } from "@/components/dmu-delivery-tabs";
 import { SubmitButton } from "@/components/submit-button";
 
+import { MailQueuePanel } from "@/components/mail-queue-panel";
+import { AUTOMATIC_SEND_DESCRIPTION } from "@/lib/mail-policy";
+
+export const maxDuration = 300;
+
 export default async function ManualSendPage({
   searchParams,
 }: {
-  searchParams: Promise<{ success?: string; count?: string; error?: string }>;
+  searchParams: Promise<{ success?: string; count?: string; accepted?: string; remaining?: string; failures?: string; empty?: string; error?: string }>;
 }) {
   await requireRole("DMU_ADMIN");
   const feedback = await searchParams;
   const now = new Date();
 
   const eligibleDueWhere = {
-    status: "PENDING" as const,
+    status: { in: ["PENDING", "PROCESSED"] as ("PENDING" | "PROCESSED")[] },
     sendAt: { lte: now },
     surveyInstance: {
-      OR: [
-        { surveyType: { not: "EVENT" as const } },
-        { clubReadyAt: { not: null } },
-      ],
+      status: { in: ["SCHEDULED", "SENT"] as ("SCHEDULED" | "SENT")[] },
+      AND: [{ OR: [{ closesAt: null }, { closesAt: { gt: now } }] }, { OR: [{ status: "SCHEDULED" as const }, { invitations: { some: { deliveryStatus: "PENDING" as const } } }] }],
     },
   };
 
@@ -58,16 +61,16 @@ export default async function ManualSendPage({
     revalidatePath("/dmu/settings/sends");
     revalidatePath("/dmu/calendar");
 
-    if (result.processedCount === 0) {
+    if (result.processedCount === 0 && result.delivery.attemptedCount === 0 && result.remainingCount === 0 && result.skippedNoParticipantsCount === 0) {
       redirect("/dmu/settings/manual-send?error=nothing_sent");
     }
 
-    redirect(`/dmu/settings/manual-send?success=sent&count=${result.processedCount}`);
+    redirect(`/dmu/settings/manual-send?success=sent&accepted=${result.delivery.deliveredCount}&remaining=${result.remainingCount}&failures=${result.delivery.permanentlyFailedCount + result.delivery.reviewCount + result.scheduleFailuresCount}&empty=${result.skippedNoParticipantsCount}`);
   }
 
   const feedbackMessage =
     feedback.success === "sent"
-      ? `Udsendelse igangsat for ${Number(feedback.count ?? 0)} ${Number(feedback.count ?? 0) === 1 ? "spørgeskema" : "spørgeskemaer"}. Invitationerne sendes nu.`
+      ? `Behandlet: ${Number(feedback.accepted ?? 0)} invitationer accepteret af Brevo, ${Number(feedback.remaining ?? 0)} tilbage i køen, ${Number(feedback.failures ?? 0)} fejl/kræver kontrol og ${Number(feedback.empty ?? 0)} udsendelser uden modtagere.`
       : feedback.error === "no_selection"
         ? "Vælg mindst én udsendelse først."
         : feedback.error === "nothing_sent"
@@ -125,6 +128,8 @@ export default async function ManualSendPage({
         </div>
       ) : null}
 
+      <MailQueuePanel />
+
       {/* Klar nu */}
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
         <h2 className="font-heading text-xl font-semibold tracking-tight text-foreground">
@@ -140,7 +145,7 @@ export default async function ManualSendPage({
               Ingen udsendelser er klar til manuel afsendelse lige nu.
               <br />
               <span className="mt-1 block text-xs">
-                Den daglige automatiske udsendelse kører kl. 18:00.
+                {AUTOMATIC_SEND_DESCRIPTION}
               </span>
             </div>
           ) : (
@@ -155,7 +160,6 @@ export default async function ManualSendPage({
                       type="checkbox"
                       name="scheduledSendIds"
                       value={send.id}
-                      defaultChecked
                       className="h-4 w-4 rounded"
                     />
                     <div className="flex-1 min-w-0">
@@ -171,6 +175,7 @@ export default async function ManualSendPage({
                         year: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
+                        timeZone: "Europe/Copenhagen",
                       }).format(send.sendAt)}
                     </span>
                   </label>
@@ -180,7 +185,8 @@ export default async function ManualSendPage({
               <div className="flex justify-end pt-2">
                 <SubmitButton
                   className="rounded-2xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground transition hover:-translate-y-0.5 hover:bg-primary/90 disabled:translate-y-0 disabled:opacity-70"
-                  pendingText="Sender..."
+                  pendingText="Behandler valgte udsendelser..."
+                  confirmMessage="Behandl kun de markerede udsendelser? Der sendes invitationer inden for den fælles mailkvote."
                 >
                   Send valgte udsendelser
                 </SubmitButton>

@@ -1,6 +1,7 @@
 "use client";
 
 import { QuestionType } from "@prisma/client";
+import type { QuestionEditResult } from "@/lib/question-editing";
 import { useState } from "react";
 import { LoadingSpinner, SubmitButton } from "@/components/submit-button";
 
@@ -26,8 +27,10 @@ interface Question {
 
 interface QuestionEditCardProps {
   question: Question;
+  isLocked: boolean;
   benchmarkCategoryOptions: string[];
-  onEdit: (formData: FormData) => Promise<void>;
+  onEdit: (formData: FormData) => Promise<QuestionEditResult>;
+  onCopy: (questionId: string) => Promise<void>;
   onDelete: (questionId: string) => Promise<void>;
   onToggleActive: (formData: FormData) => Promise<void>;
 }
@@ -35,12 +38,17 @@ interface QuestionEditCardProps {
 export function QuestionEditCard({
   question,
   benchmarkCategoryOptions,
+  isLocked,
   onEdit,
+  onCopy,
   onDelete,
   onToggleActive,
 }: QuestionEditCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
+  const [message, setMessage] = useState("");
+  const [editType, setEditType] = useState(question.questionType);
 
   const handleDelete = async () => {
     if (!window.confirm(`Er du sikker på, at du vil slette "${question.title}"?`)) {
@@ -58,8 +66,22 @@ export function QuestionEditCard({
   };
 
   const handleSubmitEdit = async (formData: FormData) => {
-    await onEdit(formData);
-    setIsEditing(false);
+    setMessage("");
+    try {
+      const result = await onEdit(formData);
+      if (result.error) { setMessage(result.error); return; }
+      setIsEditing(false);
+      setMessage("Gemt");
+    } catch {
+      setMessage("Ændringerne kunne ikke gemmes. Prøv igen.");
+    }
+  };
+
+  const handleCopy = async () => {
+    setIsCopying(true);
+    try { await onCopy(question.id); setMessage("Kopien er oprettet i spørgsmålslisten."); }
+    catch { setMessage("Kopien kunne ikke oprettes. Prøv igen."); }
+    finally { setIsCopying(false); }
   };
 
   const currentBenchmarkCategory = question.benchmarkKey ? (question.benchmarkKey.split("_")[0] ?? "") : "";
@@ -71,6 +93,7 @@ export function QuestionEditCard({
     return (
       <article className="rounded-lg border p-4 bg-muted/30">
         <form action={handleSubmitEdit} className="space-y-4">
+          {message && <p role="status" className="text-sm">{message}</p>}
           <input type="hidden" name="questionId" value={question.id} />
 
           <div className="space-y-1">
@@ -105,7 +128,8 @@ export function QuestionEditCard({
             <select
               id={`questionType-${question.id}`}
               name="questionType"
-              defaultValue={question.questionType}
+              value={editType}
+              onChange={(event) => setEditType(event.target.value as QuestionType)}
               className="w-full rounded-md border px-3 py-2 text-sm"
             >
               <option value="SCALE_1_5">Skala 1-5</option>
@@ -152,7 +176,7 @@ export function QuestionEditCard({
             />
           </div>
 
-          {question.questionType === "SINGLE_CHOICE" && (
+          {editType === "SINGLE_CHOICE" && (
             <div className="space-y-1">
               <label className="text-sm font-medium" htmlFor={`optionsRaw-${question.id}`}>
                 Svarmuligheder (kommasepareret)
@@ -189,6 +213,8 @@ export function QuestionEditCard({
 
   return (
     <article className="rounded-lg border p-4">
+      {message && <p role="status" className="mb-3 text-sm">{message}</p>}
+      {isLocked && <p className="mb-3 text-sm text-muted-foreground">Brugt i et spørgeskema: indholdet er låst. Opret en kopi for at ændre det.</p>}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="font-medium break-words">{question.title}</p>
@@ -203,9 +229,13 @@ export function QuestionEditCard({
         </div>
 
         <div className="flex shrink-0 gap-2">
+          <button type="button" onClick={handleCopy} disabled={isCopying} className="rounded-md border px-3 py-2 text-xs font-medium disabled:opacity-50">
+            {isCopying ? <span className="inline-flex items-center gap-2"><LoadingSpinner />Kopierer...</span> : "Opret kopi"}
+          </button>
           <button
             type="button"
-            onClick={() => setIsEditing(true)}
+            onClick={() => { setMessage(""); setIsEditing(true); }}
+            disabled={isLocked}
             className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-muted"
           >
             Rediger
@@ -241,7 +271,7 @@ export function QuestionEditCard({
           <button
             type="button"
             onClick={handleDelete}
-            disabled={isDeleting}
+            disabled={isDeleting || isLocked}
             className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
           >
             {isDeleting ? <span className="inline-flex items-center gap-2"><LoadingSpinner />Sletter...</span> : "Slet"}

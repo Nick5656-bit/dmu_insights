@@ -6,6 +6,7 @@ import { useFormStatus } from "react-dom";
 type Props = Omit<React.ComponentProps<"button">, "type" | "children"> & {
   children: React.ReactNode;
   pendingText?: string;
+  confirmMessage?: string;
 };
 
 export function LoadingSpinner() {
@@ -34,11 +35,15 @@ export function LoadingSpinner() {
   );
 }
 
-export function SubmitButton({ children, pendingText, className, disabled, ...buttonProps }: Props) {
+export function SubmitButton({ children, pendingText, className, disabled, confirmMessage, onClick, ...buttonProps }: Props) {
   const { pending } = useFormStatus();
 
   return (
-    <button {...buttonProps} type="submit" disabled={pending || disabled} className={className}>
+    <button {...buttonProps} type="submit" disabled={pending || disabled} className={className}
+      onClick={(event) => {
+        if (confirmMessage && !window.confirm(confirmMessage)) { event.preventDefault(); return; }
+        onClick?.(event);
+      }}>
       {pending ? (
         <span className="flex items-center justify-center gap-2">
           <LoadingSpinner />

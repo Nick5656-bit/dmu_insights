@@ -44,7 +44,7 @@ export default async function DmuPrivacySettingsPage() {
       <section className="rounded-[28px] border border-primary/20 bg-[linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-white shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">Databeskyttelse</p>
         <h1 className="mt-2 text-3xl font-semibold">Privatliv og datalivscyklus</h1>
-        <p className="mt-2 max-w-3xl text-sm text-white/75">Den daglige systemopgave lukker surveys, fjerner kontaktoplysninger efter {PII_RETENTION_DAYS} dage og sletter anonymiserede svar efter {RESPONSE_RETENTION_YEARS} år.</p>
+        <p className="mt-2 max-w-3xl text-sm text-white/75">Den daglige systemopgave lukker surveys, redigerer invitationsoplysninger efter {PII_RETENTION_DAYS} dage og sletter svar efter {RESPONSE_RETENTION_YEARS} år. Fristerne regnes fra det registrerede lukketidspunkt. Medlemsregistre, ekstra kontaktadresser og brugerkonti skal håndteres særskilt.</p>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">

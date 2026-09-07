@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useActionState } from "react";
+import { useMemo, useState, useActionState } from "react";
 import { SubmitButton } from "@/components/submit-button";
 
 type QuestionMeta = {
@@ -34,6 +34,7 @@ type SaveState = {
 const initialSaveState: SaveState = { status: "idle", message: "" };
 
 type Props = {
+  readOnly?: boolean;
   templateId: string;
   initialItems: StructureItem[];
   questionPool: QuestionMeta[];
@@ -64,20 +65,18 @@ function getQuestionTypeLabel(questionType: QuestionMeta["questionType"]): strin
   return "Tekst";
 }
 
-export function TemplateStructureEditor({ templateId, initialItems, questionPool, questionMeta, saveAction }: Props) {
+export function TemplateStructureEditor({ templateId, initialItems, questionPool, questionMeta, saveAction, readOnly = false }: Props) {
   const [items, setItems] = useState<StructureItem[]>(initialItems);
   const [headingTitle, setHeadingTitle] = useState("");
   const [selectedQuestionId, setSelectedQuestionId] = useState("");
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
-  const [saveState, saveFormAction] = useActionState(saveAction, initialSaveState);
   const serializedItems = useMemo(() => JSON.stringify({ version: 1, items }), [items]);
   const [lastSavedItems, setLastSavedItems] = useState(serializedItems);
-
-  useEffect(() => {
-    if (saveState.status === "success") {
-      setLastSavedItems(serializedItems);
-    }
-  }, [saveState.status, serializedItems]);
+  const [saveState, saveFormAction] = useActionState(async (previous: SaveState, formData: FormData) => {
+    const result = await saveAction(previous, formData);
+    if (result.status === "success") setLastSavedItems(String(formData.get("structureJson")));
+    return result;
+  }, initialSaveState);
 
   const questionById = useMemo(() => {
     const merged = [...questionPool, ...questionMeta];
@@ -178,10 +177,11 @@ export function TemplateStructureEditor({ templateId, initialItems, questionPool
             return (
               <div
                 key={item.id}
-                draggable
+                draggable={!readOnly}
                 onDragStart={() => setDraggedItemId(item.id)}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => {
+                  if (readOnly) return;
                   if (!draggedItemId) {
                     return;
                   }
@@ -233,10 +233,11 @@ export function TemplateStructureEditor({ templateId, initialItems, questionPool
           return (
             <div
               key={item.id}
-              draggable
+              draggable={!readOnly}
               onDragStart={() => setDraggedItemId(item.id)}
               onDragOver={(event) => event.preventDefault()}
               onDrop={() => {
+                if (readOnly) return;
                 if (!draggedItemId) {
                   return;
                 }

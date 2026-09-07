@@ -9,6 +9,7 @@ type DistributionSlice = {
 };
 
 type QuestionDistributionTileProps = {
+  questionType: "SCALE_1_5" | "SINGLE_CHOICE" | "TEXT";
   title: string;
   category: string;
   avg: number | null;
@@ -22,6 +23,7 @@ type QuestionDistributionTileProps = {
 const COLORS = ["#2563eb", "#16a34a", "#f59e0b", "#ef4444", "#7c3aed"];
 
 export function QuestionDistributionTile({
+  questionType,
   title,
   category,
   avg,
@@ -103,7 +105,7 @@ export function QuestionDistributionTile({
                       const numericValue = Number(value ?? 0);
                       return [`${numericValue} svar (${formatShare(numericValue)})`, "Besvarelser"];
                     }}
-                    labelFormatter={(label) => `Score ${label}`}
+                    labelFormatter={(label) => questionType === "SCALE_1_5" ? `Score ${label}` : String(label)}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -118,7 +120,7 @@ export function QuestionDistributionTile({
                       const numericValue = Number(value ?? 0);
                       return [`${numericValue} svar (${formatShare(numericValue)})`, "Besvarelser"];
                     }}
-                    labelFormatter={(label) => `Score ${label}`}
+                    labelFormatter={(label) => questionType === "SCALE_1_5" ? `Score ${label}` : String(label)}
                   />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {data.map((entry, index) => (
@@ -130,10 +132,10 @@ export function QuestionDistributionTile({
             )}
           </div>
 
-          <div className="mt-1 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Gns. tilfredshed</p>
+          {questionType === "SCALE_1_5" && <div className="mt-1 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">Gennemsnit (1–5)</p>
             <p className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-sm font-semibold text-emerald-700">{avg ? avg.toFixed(2) : "-"}</p>
-          </div>
+          </div>}
 
           <div className="mt-2 flex flex-wrap gap-2">
             {data.map((slice, index) => (

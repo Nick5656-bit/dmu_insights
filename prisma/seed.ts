@@ -49,6 +49,7 @@ async function main() {
     data: {
       name: "Aarhus Motorsport Klub",
       city: "Aarhus",
+      isTest: true,
       active: true,
     },
   });

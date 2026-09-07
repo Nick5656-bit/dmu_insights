@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { processDueScheduledSends } from "@/lib/scheduled-sends";
+import { AUTOMATIC_SEND_DESCRIPTION } from "@/lib/mail-policy";
 import { SubmitButton } from "@/components/submit-button";
 
 const participantSchema = z.object({
@@ -25,7 +26,7 @@ function formatDate(value: Date) {
 
 function formatDateTime(value: Date | null | undefined) {
   return value
-    ? new Intl.DateTimeFormat("da-DK", { dateStyle: "medium", timeStyle: "short" }).format(value)
+    ? new Intl.DateTimeFormat("da-DK", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Copenhagen" }).format(value)
     : "Ikke planlagt";
 }
 
@@ -75,6 +76,8 @@ async function isParticipantListLocked(eventId: string) {
   return survey?.status === "SENT" || survey?.status === "CLOSED" || survey?.scheduledSends[0]?.status === "PROCESSED";
 }
 
+export const maxDuration = 300;
+
 export default async function DmuEventDetailPage({
   params,
   searchParams,
@@ -89,7 +92,7 @@ export default async function DmuEventDetailPage({
   const event = await prisma.event.findUnique({
     where: { id },
     include: {
-      club: { select: { name: true } },
+      club: { select: { name: true, isTest: true } },
       participants: { orderBy: [{ createdAt: "desc" }, { email: "asc" }] },
       surveyInstances: {
         include: {
@@ -236,7 +239,8 @@ export default async function DmuEventDetailPage({
     }
 
     // Kald direkte (kører synkront – acceptabelt for en manuel trigger)
-    await processDueScheduledSends();
+    if (!send) redirect(`/dmu/events/${id}?error=cannot_send_now`);
+    await processDueScheduledSends([send.id]);
 
     revalidatePath(`/dmu/events/${id}`);
     revalidatePath("/dmu/calendar");
@@ -256,7 +260,7 @@ export default async function DmuEventDetailPage({
         : feedback.success === "participant_removed"
           ? "Deltageren er fjernet."
           : feedback.success === "sent_now"
-            ? `✓ Udsendelse igangsat – ${event.participants.length} invitationer er under afsendelse.`
+            ? "Udsendelsen er behandlet. Se mailkøen under Indstillinger for accepterede mails, ventende invitationer og eventuelle fejl."
             : feedback.error === "no_valid_participants"
               ? "Indsæt mindst én gyldig e-mailadresse."
               : feedback.error === "invalid_participant"
@@ -271,6 +275,7 @@ export default async function DmuEventDetailPage({
 
   return (
     <div className="space-y-6">
+      <p className="rounded-xl border bg-muted/20 p-3 text-sm">{event.club.isTest ? "TESTKLUB. " : ""}{AUTOMATIC_SEND_DESCRIPTION} <Link className="underline" href="/dmu/settings/manual-send">Se mailkøen</Link></p>
       {/* Topbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/dmu/calendar" className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">

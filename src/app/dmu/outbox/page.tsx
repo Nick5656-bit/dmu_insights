@@ -1,5 +1,6 @@
 import { SurveyType } from "@prisma/client";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ClubMultiSelectFilter } from "@/components/club-multi-select-filter";
 import { DmuDeliveryTabs } from "@/components/dmu-delivery-tabs";
@@ -24,6 +25,8 @@ function parseClubIds(rawValue: string | string[] | undefined): string[] {
   const values = Array.isArray(rawValue) ? rawValue : [rawValue];
   return [...new Set(values.flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean))];
 }
+
+export const maxDuration = 300;
 
 export default async function DmuOutboxPage({ searchParams }: DmuOutboxPageProps) {
   await requireRole("DMU_ADMIN");
@@ -152,12 +155,13 @@ export default async function DmuOutboxPage({ searchParams }: DmuOutboxPageProps
       return;
     }
 
-    await processDueScheduledSends(selectedScheduledSendIds);
+    const result = await processDueScheduledSends(selectedScheduledSendIds);
 
     revalidatePath("/dmu/settings/sends");
     revalidatePath("/dmu/calendar");
     revalidatePath("/club/outbox");
     revalidatePath("/club/events");
+    redirect(`/dmu/settings/manual-send?success=sent&accepted=${result.delivery.deliveredCount}&remaining=${result.remainingCount}&failures=${result.delivery.permanentlyFailedCount + result.delivery.reviewCount + result.scheduleFailuresCount}&empty=${result.skippedNoParticipantsCount}`);
   }
 
   const hasActiveFilters = Boolean(selectedClubIds.length > 0 || surveyTypeFilter);

@@ -39,7 +39,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold">Hvem kan se oplysningerne?</h2>
             <p className="mt-2 text-muted-foreground">
-              Autoriserede DMU-administratorer håndterer udsendelser. Klubber ser kun aggregerede resultater, når anonymitetstærsklen er opfyldt. DMU anvender Neon til databasen, Vercel til hosting og Brevo til udsendelse af e-mail. De nødvendige databehandleraftaler og overførselsvurderinger skal være på plads før offentlig drift.
+              Autoriserede DMU-administratorer håndterer udsendelser. Klubber ser resultater for deres egen klub. Et spørgsmål vises først fra fem gyldige svar i det valgte udsnit. Det gælder også fritekstsvar, som vises uden invitationsoplysninger; undlad derfor navne og andre personoplysninger i svarene. DMU anvender Neon til databasen, Vercel til hosting og Brevo til udsendelse af e-mail. De nødvendige databehandleraftaler og overførselsvurderinger skal være på plads før offentlig drift.
             </p>
           </section>
 
@@ -53,9 +53,10 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-lg font-semibold">Opbevaring og sletning</h2>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
-              <li>Navn, e-mail, deltagerlister og mailhistorik slettes eller anonymiseres {PII_RETENTION_DAYS} dage efter surveyets lukning.</li>
-              <li>Survey-svar og aggregerede resultater slettes efter {RESPONSE_RETENTION_YEARS} år.</li>
-              <li>Backups følger de dokumenterede opbevaringsperioder hos de valgte leverandører.</li>
+              <li>Invitationsadresser, tilknytninger og mailhistorik slettes eller redigeres ved den første automatiske oprydning {PII_RETENTION_DAYS} dage efter spørgeskemaets registrerede lukketidspunkt. En fælles deltagerliste bevares, indtil alle dens spørgeskemaer har passeret fristen.</li>
+              <li>Survey-svar slettes ved den første automatiske oprydning {RESPONSE_RETENTION_YEARS} år efter spørgeskemaets registrerede lukketidspunkt.</li>
+              <li>Medlemsregistre, ekstra kontaktadresser og brugerkonti er ikke omfattet af den automatiske sletning ovenfor. DMU skal fastlægge særskilte slettefrister og ansvar for disse.</li>
+              <li>Backupfrister og proceduren for sletning efter en gendannelse skal fastlægges med de valgte leverandører før pilotstart.</li>
             </ul>
           </section>
 

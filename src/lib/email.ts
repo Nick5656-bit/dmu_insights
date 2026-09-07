@@ -1,3 +1,5 @@
+import { mailFailure } from "@/lib/mail-policy";
+
 const getBrevoApiKey = () => {
   const key = process.env.BREVO_API_KEY;
   if (!key) {
@@ -30,17 +32,19 @@ export type SendSurveyInvitationParams = {
   surveyName: string;
   token: string;
   kind?: "INITIAL" | "REMINDER";
+  surveyType?: "ANNUAL" | "EVENT";
 };
 
 export type SendSurveyInvitationResult =
   | { success: true }
-  | { success: false; error: string; retryable: boolean };
+  | { success: false; error: string; retryable: boolean; quotaBlocked?: boolean; accountBlocked?: boolean; uncertain?: boolean };
 
 export async function sendSurveyInvitation({
   toEmail,
   surveyName,
   token,
   kind = "INITIAL",
+  surveyType = "EVENT",
 }: SendSurveyInvitationParams): Promise<SendSurveyInvitationResult> {
   const surveyUrl = `${getAppUrl()}/survey/${token}`;
   const privacyUrl = `${getAppUrl()}/privacy`;
@@ -89,7 +93,7 @@ export async function sendSurveyInvitation({
             <td style="background:#ffffff;padding:40px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7;">
               ${reminderNotice}
               <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">
-                Du har deltaget i <strong>${safeSurveyName}</strong>, og vi håber du havde en god oplevelse.
+                ${surveyType === "ANNUAL" ? `Vi inviterer dig til <strong>${safeSurveyName}</strong> om dit medlemskab og din klub.` : `Du har deltaget i <strong>${safeSurveyName}</strong>, og vi håber du havde en god oplevelse.`}
               </p>
               <p style="margin:0 0 24px;color:#3f3f46;font-size:15px;line-height:1.6;">
                 Vi vil meget gerne høre din feedback – det hjælper os med at gøre motorsport i Danmark endnu bedre for alle. Det tager kun <strong>2-3 minutter</strong>.
@@ -135,7 +139,7 @@ export async function sendSurveyInvitation({
             <td style="background:#f4f4f5;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;">
               <p style="margin:0;color:#a1a1aa;font-size:12px;line-height:1.6;">
                 Denne mail er sendt via <strong>DMU's feedbacksystem</strong>.<br/>
-                Dine oplysninger deles aldrig med tredjeparter.
+                Læs om behandling af dine oplysninger via privatlivslinket ovenfor.
               </p>
             </td>
           </tr>
@@ -152,7 +156,7 @@ Hej,
 
 ${isReminder ? "Dette er en venlig paamindelse. Du kan se bort fra mailen, hvis du allerede har svaret.\n" : ""}
 
-Du har deltaget i ${surveyName.replace(/[\r\n]+/g, " ").trim()}, og vi vil gerne høre din mening.
+${surveyType === "ANNUAL" ? `Vi inviterer dig til ${cleanSurveyName} om dit medlemskab og din klub.` : `Du har deltaget i ${cleanSurveyName}, og vi vil gerne høre din mening.`}
 
 Besvar undersøgelsen her (tager 2-3 minutter):
 ${surveyUrl}
@@ -171,6 +175,7 @@ Danmarks Motor Union
   try {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
+      signal: AbortSignal.timeout(20_000),
       headers: {
         "api-key": getBrevoApiKey(),
         "Content-Type": "application/json",
@@ -186,23 +191,30 @@ Danmarks Motor Union
     });
 
     if (!response.ok) {
-      // Do not retain Brevo's response body: it can contain personal information.
+      // Inspect only the machine-readable code; never retain provider messages or recipient data.
+      const body: unknown = await response.json().catch(() => null);
+      const code = body && typeof body === "object" && "code" in body ? body.code : undefined;
+      const failure = mailFailure(response.status, code);
       console.error(`[email] Brevo fejl (HTTP ${response.status})`);
       return {
         success: false,
-        error: `HTTP ${response.status}`,
-        retryable: response.status === 429 || response.status >= 500,
+        error: failure.uncertain
+          ? "Ukendt leveringsstatus. Kontrollér Brevo før eventuel genudsendelse."
+          : `Brevo HTTP ${response.status}${failure.quotaBlocked ? ": mailkvote opbrugt" : failure.accountBlocked ? ": kontoen kræver kontrol" : ""}`,
+        ...failure,
       };
     }
 
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Ukendt fejl";
-    console.error("[email] Uventet fejl ved afsendelse:", message);
+    console.error("[email] Afsendelsen kunne ikke bekræftes.");
     return {
       success: false,
-      error: message,
-      retryable: !message.includes("BREVO_API_KEY") && !message.includes("SMTP_FROM"),
+      error: message.includes("BREVO_API_KEY") ? "BREVO_API_KEY mangler. Kontrollér konfigurationen." : "Ukendt leveringsstatus. Kontrollér Brevo før eventuel genudsendelse.",
+      retryable: message.includes("BREVO_API_KEY"),
+      accountBlocked: message.includes("BREVO_API_KEY"),
+      uncertain: !message.includes("BREVO_API_KEY"),
     };
   }
 }

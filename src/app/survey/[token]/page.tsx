@@ -1,16 +1,12 @@
-import { redirect } from "next/navigation";
 import { DmuLogo } from "@/components/dmu-logo";
 import { SurveyWizard, type WizardStep } from "@/components/survey-wizard";
 import { prisma } from "@/lib/prisma";
 import { hashSurveyToken } from "@/lib/survey-token";
+import { parseSurveySubmission, type SubmissionResult } from "@/lib/survey-submission";
 import {
-  isRespondentAgeGroup,
-  isRespondentRole,
-  isSelectableMotocrossClass,
   motocrossClassOptionGroups,
   respondentAgeGroupOptions,
   respondentRoleOptions,
-  roleNeedsMotocrossClass,
 } from "@/lib/survey-segments";
 
 type LayoutItem =
@@ -87,8 +83,8 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
   }
 
   if (!invitation.openedAt) {
-    await prisma.surveyInvitation.update({
-      where: { id: invitation.id },
+    await prisma.surveyInvitation.updateMany({
+      where: { id: invitation.id, status: { in: ["SENT", "OPENED"] } },
       data: {
         status: invitation.status === "SENT" ? "OPENED" : invitation.status,
         openedAt: new Date(),
@@ -97,7 +93,7 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
   }
 
   // ── Server action ───────────────────────────────────────────────────────
-  async function submitSurveyAction(formData: FormData) {
+  async function submitSurveyAction(formData: FormData): Promise<SubmissionResult> {
     "use server";
 
     const currentInvitation = await prisma.surveyInvitation.findFirst({
@@ -115,61 +111,22 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
       },
     });
 
-    const surveyHasClosed =
-      !currentInvitation ||
-      currentInvitation.status === "ANSWERED" ||
-      currentInvitation.surveyInstance.status !== "SENT" ||
-      Boolean(currentInvitation.surveyInstance.closesAt && currentInvitation.surveyInstance.closesAt <= new Date());
-
-    if (surveyHasClosed || !currentInvitation) return;
-
-    const respondentAgeGroup = String(formData.get("segment_respondentAgeGroup") ?? "");
-    const respondentRole = String(formData.get("segment_respondentRole") ?? "");
-    const rawMotocrossClass = String(formData.get("segment_motocrossClass") ?? "");
-
-    if (!isRespondentAgeGroup(respondentAgeGroup) || respondentAgeGroup === "NOT_REPORTED") return;
-    if (!isRespondentRole(respondentRole) || respondentRole === "NOT_REPORTED") return;
-
-    const motocrossClass = roleNeedsMotocrossClass(respondentRole)
-      ? isSelectableMotocrossClass(rawMotocrossClass)
-        ? rawMotocrossClass
-        : null
-      : "NOT_APPLICABLE";
-
-    if (!motocrossClass) return;
-
-    const answersToCreate: { questionId: string; numericValue?: number; optionValue?: string; textValue?: string }[] = [];
-
-    for (const surveyQuestion of currentInvitation.surveyInstance.surveyInstanceQuestions) {
-      const fieldName = `question_${surveyQuestion.questionId}`;
-      const rawValue = String(formData.get(fieldName) ?? "").trim();
-
-      if (surveyQuestion.required && !rawValue) return;
-      if (!rawValue) continue;
-
-      if (surveyQuestion.question.questionType === "SCALE_1_5") {
-        const numericValue = Number(rawValue);
-        if (!Number.isInteger(numericValue) || numericValue < 1 || numericValue > 5) return;
-        answersToCreate.push({ questionId: surveyQuestion.questionId, numericValue });
-        continue;
-      }
-
-      if (surveyQuestion.question.questionType === "SINGLE_CHOICE") {
-        const validOptionValues = new Set(surveyQuestion.question.options.map((o) => o.value));
-        if (!validOptionValues.has(rawValue)) return;
-        answersToCreate.push({ questionId: surveyQuestion.questionId, optionValue: rawValue });
-        continue;
-      }
-
-      answersToCreate.push({ questionId: surveyQuestion.questionId, textValue: rawValue });
+    if (!currentInvitation) return { error: "Linket er ugyldigt eller udløbet." };
+    if (currentInvitation.status === "ANSWERED") return { error: "Dette link er allerede brugt. Din besvarelse er registreret." };
+    if (currentInvitation.surveyInstance.status !== "SENT" || (currentInvitation.surveyInstance.closesAt && currentInvitation.surveyInstance.closesAt <= new Date())) {
+      return { error: "Spørgeskemaet er lukket og modtager ikke længere svar." };
     }
-
-    if (answersToCreate.length === 0) return;
+    const parsed = parseSurveySubmission(formData, currentInvitation.surveyInstance.surveyInstanceQuestions);
+    if ("error" in parsed) return parsed;
+    const { respondentAgeGroup, respondentRole, motocrossClass, answers: answersToCreate } = parsed.data;
 
     const submitted = await prisma.$transaction(async (tx) => {
       const submittedAt = new Date();
       const claim = await tx.surveyInvitation.updateMany({
-        where: { id: currentInvitation.id, status: { in: ["SENT", "OPENED"] } },
+        where: {
+          id: currentInvitation.id, status: { in: ["SENT", "OPENED"] },
+          surveyInstance: { status: "SENT", OR: [{ closesAt: null }, { closesAt: { gt: submittedAt } }] },
+        },
         data: { status: "ANSWERED", answeredAt: submittedAt, openedAt: currentInvitation.openedAt ?? submittedAt },
       });
 
@@ -206,8 +163,8 @@ export default async function SurveyTokenPage({ params }: { params: Promise<{ to
       return true;
     });
 
-    if (!submitted) return;
-    redirect("/thank-you");
+    if (!submitted) return { error: "Linket er allerede brugt, eller spørgeskemaet er lukket. Der er ikke gemt en ekstra besvarelse." };
+    return { success: true };
   }
 
   // ── Byg wizard-steps ────────────────────────────────────────────────────

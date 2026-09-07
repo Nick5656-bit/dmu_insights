@@ -6,6 +6,8 @@ import { SendSurveyWizard } from "@/components/send-survey-wizard";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+import { hasAutomaticSendWindow } from "@/lib/mail-policy";
+
 const eventInputSchema = z.object({
   clubId: z.string().min(1),
   title: z.string().trim().min(3).max(160),
@@ -35,7 +37,7 @@ export default async function DmuSendPage() {
   await requireRole("DMU_ADMIN");
 
   const [clubs, templates] = await Promise.all([
-    prisma.club.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.club.findMany({ where: { active: true }, select: { id: true, name: true, isTest: true }, orderBy: { name: "asc" } }),
     prisma.surveyTemplate.findMany({
       where: { isActive: true },
       select: {
@@ -73,7 +75,7 @@ export default async function DmuSendPage() {
     if (payload.mode === "ANNUAL") {
       const sendAt = new Date(payload.sendAt);
       const closesAt = new Date(payload.closesAt);
-      if (Number.isNaN(sendAt.getTime()) || Number.isNaN(closesAt.getTime()) || closesAt <= sendAt) {
+      if (Number.isNaN(sendAt.getTime()) || Number.isNaN(closesAt.getTime()) || !hasAutomaticSendWindow(sendAt, closesAt)) {
         redirect("/dmu/send?error=invalid_close_time");
       }
 
@@ -133,7 +135,7 @@ export default async function DmuSendPage() {
       redirect("/dmu/surveys?surveyType=ANNUAL&status=SCHEDULED");
     }
 
-    if (payload.events.some((event) => new Date(event.closesAt) <= new Date(event.sendAt))) {
+    if (payload.events.some((event) => !hasAutomaticSendWindow(new Date(event.sendAt), new Date(event.closesAt)))) {
       redirect("/dmu/send?error=invalid_close_time");
     }
 
@@ -221,7 +223,7 @@ export default async function DmuSendPage() {
 
       <SendSurveyWizard
         templates={templates.map((template) => ({ ...template, questionCount: template._count.templateQuestions }))}
-        clubs={clubs}
+        clubs={clubs.map((club) => ({ ...club, name: `${club.name}${club.isTest ? " (testklub)" : ""}` }))}
         createBatchAction={createBatchAction}
       />
     </div>

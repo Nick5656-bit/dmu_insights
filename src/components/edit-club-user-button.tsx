@@ -65,9 +65,11 @@ export function EditClubUserButton({
           </label>
           <input
             id={`edit-password-${userId}`}
-            type="text"
+            type="password"
             name="password"
-            minLength={6}
+            minLength={12}
+            maxLength={72}
+            autoComplete="new-password"
             placeholder="Lad stå tom for at beholde nuværende"
             className="w-full rounded-md border px-2 py-1.5 text-xs"
           />

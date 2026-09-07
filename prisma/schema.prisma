@@ -211,6 +211,7 @@ model Club {
   name      String   @unique
   city      String
   active    Boolean  @default(true)
+  isTest    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -474,6 +475,7 @@ model MailLog {
   bodyPreview        String
   sentAt             DateTime
   status             MailStatus
+  quotaTracked       Boolean    @default(false)
 
   surveyInvitation SurveyInvitation @relation(fields: [surveyInvitationId], references: [id], onDelete: Cascade)
 }
@@ -497,4 +499,17 @@ model LoginAttempt {
   createdAt DateTime @default(now())
 
   @@index([ip, createdAt])
+}
+
+// Conservative, shared 24-hour mail budget. Contains no recipient information.
+model MailSendReservation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model MailSendControl {
+  id           String    @id
+  blockedUntil DateTime?
 }

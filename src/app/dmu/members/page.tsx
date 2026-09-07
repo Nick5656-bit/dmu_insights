@@ -441,9 +441,7 @@ export default async function DmuMembersPage({
                             <SubmitButton
                               pendingText="Fjerner..."
                               className="rounded-md border border-red-200 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
-                              onClick={(e) => {
-                                if (!confirm(`Fjern ${member.name}?`)) e.preventDefault();
-                              }}
+                              confirmMessage={`Fjern ${member.name}?`}
                             >
                               Fjern
                             </SubmitButton>

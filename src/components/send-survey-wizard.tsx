@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AUTOMATIC_SEND_DESCRIPTION, automaticSendWindow, hasAutomaticSendWindow } from "@/lib/mail-policy";
 import { SubmitButton } from "@/components/submit-button";
 
 type SurveyType = "ANNUAL" | "EVENT";
@@ -50,6 +51,11 @@ const typeLabels: Record<SurveyType, string> = {
   ANNUAL: "Årlig måling",
   EVENT: "Arrangement",
 };
+
+function formatSendWindow(value: string) {
+  const { start, end } = automaticSendWindow(new Date(Math.max(new Date(value).getTime(), Date.now())));
+  return `${formatDateTime(start.toISOString())} – ${formatDateTime(end.toISOString())} (hvis der er kvote)`;
+}
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("da-DK", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -146,6 +152,13 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
       return;
     }
 
+    if (step === 3) {
+      const times = isAnnual ? [{ sendAt: annualSendAt, closesAt: annualClosesAt }] : events;
+      if (times.some((item) => !hasAutomaticSendWindow(new Date(item.sendAt), new Date(item.closesAt)))) {
+        setError("Lukketidspunktet skal ligge efter næste automatiske udsendelsesvindue. Afsæt gerne flere dage til svar og eventuel kø.");
+        return;
+      }
+    }
     setError(null);
     setStep((current) => Math.min(current + 1, 4));
   }
@@ -170,6 +183,7 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
 
   return (
     <div className="space-y-6">
+      <p className="rounded-2xl border bg-muted/20 p-4 text-sm">{AUTOMATIC_SEND_DESCRIPTION} Alle invitationer og påmindelser deler højst 300 afsendelsesforsøg over 24 timer. Tider indtastes i din enheds lokale tidszone.</p>
       <ol className="grid gap-2 sm:grid-cols-4">
         {steps.map((label, index) => {
           const number = index + 1;
@@ -267,7 +281,7 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
           <h2 className="text-xl font-semibold">Sæt sendetidspunkt</h2>
           <p className="mt-1 text-sm text-muted-foreground">Samme tidspunkt bruges for alle {annualClubIds.length} valgte {annualClubIds.length === 1 ? "klub" : "klubber"}.</p>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <label className="text-sm font-medium">Sendes<input className="mt-1" type="datetime-local" value={annualSendAt} onChange={(input) => setAnnualSendAt(input.target.value)} /></label>
+            <label className="text-sm font-medium">Tidligst<input className="mt-1" type="datetime-local" value={annualSendAt} onChange={(input) => setAnnualSendAt(input.target.value)} /></label>
             <label className="text-sm font-medium">Lukker<input className="mt-1" type="datetime-local" value={annualClosesAt} onChange={(input) => setAnnualClosesAt(input.target.value)} /></label>
           </div>
         </section>
@@ -289,7 +303,7 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
             {events.map((event, index) => (
               <div key={event.id} className="grid gap-3 rounded-2xl border bg-background p-4 md:grid-cols-[minmax(0,1fr)_220px_220px] md:items-end">
                 <div><p className="font-medium">{event.title || `Arrangement ${index + 1}`}</p><p className="mt-1 text-sm text-muted-foreground">{clubs.find((club) => club.id === event.clubId)?.name ?? "Klub ikke valgt"} · {event.eventDate || "Dato ikke valgt"}</p></div>
-                <label className="text-sm font-medium">Sendes<input className="mt-1" type="datetime-local" value={event.sendAt} onChange={(input) => updateEvent(event.id, "sendAt", input.target.value)} /></label>
+                <label className="text-sm font-medium">Tidligst<input className="mt-1" type="datetime-local" value={event.sendAt} onChange={(input) => updateEvent(event.id, "sendAt", input.target.value)} /></label>
                 <label className="text-sm font-medium">Lukker<input className="mt-1" type="datetime-local" value={event.closesAt} onChange={(input) => updateEvent(event.id, "closesAt", input.target.value)} /></label>
               </div>
             ))}
@@ -305,11 +319,11 @@ export function SendSurveyWizard({ templates, clubs, createBatchAction }: SendSu
 
           {isAnnual ? (
             <div className="mt-4 space-y-3">
-              {annualClubIds.map((clubId, index) => <article key={clubId} className="rounded-2xl border bg-background p-5"><p className="font-semibold">{index + 1}. {clubs.find((club) => club.id === clubId)?.name}</p><div className="mt-3 grid gap-3 text-sm text-muted-foreground md:grid-cols-2"><p><span className="block text-xs uppercase tracking-wide">Sendes</span>{formatDateTime(annualSendAt)}</p><p><span className="block text-xs uppercase tracking-wide">Lukker</span>{formatDateTime(annualClosesAt)}</p></div></article>)}
+              {annualClubIds.map((clubId, index) => <article key={clubId} className="rounded-2xl border bg-background p-5"><p className="font-semibold">{index + 1}. {clubs.find((club) => club.id === clubId)?.name}</p><div className="mt-3 grid gap-3 text-sm text-muted-foreground md:grid-cols-2"><p><span className="block text-xs uppercase tracking-wide">Tidligst</span>{formatDateTime(annualSendAt)}<span className="block text-xs">Forventet automatisk: {formatSendWindow(annualSendAt)}</span></p><p><span className="block text-xs uppercase tracking-wide">Lukker</span>{formatDateTime(annualClosesAt)}</p></div></article>)}
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {events.map((event, index) => <article key={event.id} className="rounded-2xl border bg-background p-5"><p className="font-semibold">{index + 1}. {event.title}</p><div className="mt-3 grid gap-3 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-5"><p><span className="block text-xs uppercase tracking-wide">Klub</span>{clubs.find((club) => club.id === event.clubId)?.name}</p><p><span className="block text-xs uppercase tracking-wide">Event</span>{event.eventDate} · {event.eventType}</p><p><span className="block text-xs uppercase tracking-wide">Lokation</span>{event.location}</p><p><span className="block text-xs uppercase tracking-wide">Sendes</span>{formatDateTime(event.sendAt)}</p><p><span className="block text-xs uppercase tracking-wide">Lukker</span>{formatDateTime(event.closesAt)}</p></div></article>)}
+              {events.map((event, index) => <article key={event.id} className="rounded-2xl border bg-background p-5"><p className="font-semibold">{index + 1}. {event.title}</p><div className="mt-3 grid gap-3 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-5"><p><span className="block text-xs uppercase tracking-wide">Klub</span>{clubs.find((club) => club.id === event.clubId)?.name}</p><p><span className="block text-xs uppercase tracking-wide">Event</span>{event.eventDate} · {event.eventType}</p><p><span className="block text-xs uppercase tracking-wide">Lokation</span>{event.location}</p><p><span className="block text-xs uppercase tracking-wide">Tidligst</span>{formatDateTime(event.sendAt)}<span className="block text-xs">Forventet automatisk: {formatSendWindow(event.sendAt)}</span></p><p><span className="block text-xs uppercase tracking-wide">Lukker</span>{formatDateTime(event.closesAt)}</p></div></article>)}
             </div>
           )}
 

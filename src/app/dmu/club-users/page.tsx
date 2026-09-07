@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
+import { pilotUserSchema } from "@/lib/pilot-setup";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DeleteClubUserButton } from "@/components/delete-club-user-button";
@@ -38,10 +39,13 @@ export default async function DmuClubUsersPage({
     const email = (formData.get("email") as string)?.trim().toLowerCase();
     const password = formData.get("password") as string;
 
-    if (!clubId || !name || !email || !password || password.length < 6) {
+    if (!clubId || !name || !email || !password || password.length < 12) {
       redirect("/dmu/settings/club-users?error=invalid_input");
     }
 
+    if (!pilotUserSchema.safeParse({ name, email, password }).success || !await prisma.club.findFirst({ where: { id: clubId, active: true } })) {
+      redirect("/dmu/settings/club-users?error=invalid_input");
+    }
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       redirect("/dmu/settings/club-users?error=email_taken");
@@ -63,7 +67,13 @@ export default async function DmuClubUsersPage({
     const userId = formData.get("userId") as string;
     if (!userId) return;
 
-    await prisma.user.delete({ where: { id: userId } });
+    const target = await prisma.user.findFirst({ where: { id: userId, role: "CLUB_ADMIN" } });
+    if (!target) redirect("/dmu/settings/club-users?error=user_not_found");
+    try {
+      await prisma.user.delete({ where: { id: userId, role: "CLUB_ADMIN" } });
+    } catch {
+      redirect("/dmu/settings/club-users?error=has_history");
+    }
 
     revalidatePath("/dmu/settings/club-users");
     redirect("/dmu/settings/club-users?success=deleted");
@@ -112,9 +122,10 @@ export default async function DmuClubUsersPage({
   // ── Render ───────────────────────────────────────────────────────
 
   const errorMessages: Record<string, string> = {
-    invalid_input: "Udfyld alle felter. Adgangskoden skal være mindst 6 tegn.",
+    invalid_input: "Vælg en aktiv klub, en gyldig e-mail og en adgangskode på mindst 12 tegn (højst 72 UTF-8 bytes).",
+    has_history: "Brugeren kan ikke slettes, fordi der er historik knyttet til den.",
     invalid_edit_input: "Navn og e-mail skal udfyldes ved redigering.",
-    invalid_edit_password: "Ny adgangskode skal være mindst 6 tegn.",
+    invalid_edit_password: "Ny adgangskode skal være mindst 12 tegn.",
     email_taken: "E-mailadressen er allerede registreret i systemet.",
     user_not_found: "Brugeren blev ikke fundet.",
   };
@@ -185,7 +196,7 @@ export default async function DmuClubUsersPage({
               <option value="">Vælg en klub…</option>
               {clubs.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name} — {c.city}
+                  {c.name}{c.isTest ? " (testklub)" : ""} — {c.city}
                   {c.users.length > 0 ? ` (${c.users.length} bruger${c.users.length > 1 ? "e" : ""})` : ""}
                 </option>
               ))}
@@ -230,14 +241,16 @@ export default async function DmuClubUsersPage({
             <input
               id="password"
               name="password"
-              type="text"
+              type="password"
               required
-              minLength={6}
-              placeholder="Minimum 6 tegn — del denne med formanden"
+              minLength={12}
+              maxLength={72}
+              autoComplete="new-password"
+              placeholder="Minimum 12 tegn"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
             <p className="text-xs text-muted-foreground">
-              Adgangskoden vises i klartekst her så du kan notere og dele den. Den gemmes krypteret i databasen.
+              Del adgangskoden via en sikker kanal. Den gemmes som en hash i databasen.
             </p>
           </div>
 

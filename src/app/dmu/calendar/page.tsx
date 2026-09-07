@@ -18,6 +18,7 @@ function formatDateTime(value: Date | null | undefined) {
   return new Intl.DateTimeFormat("da-DK", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Europe/Copenhagen",
   }).format(value);
 }
 
@@ -31,7 +32,7 @@ export default async function DmuCalendarPage({
 
   const events = await prisma.event.findMany({
     include: {
-      club: { select: { name: true } },
+      club: { select: { name: true, isTest: true } },
       _count: { select: { participants: true } },
       surveyInstances: {
         include: {
@@ -54,7 +55,7 @@ export default async function DmuCalendarPage({
       id: event.id,
       dateKey: event.eventDate.toISOString().slice(0, 10),
       title: event.title,
-      subtitle: event.club.name,
+      subtitle: `${event.club.name}${event.club.isTest ? " · TEST" : ""}`,
       calendarState: isReady ? "READY" : "AWAITING",
       badges: [event.eventType, status, `${event._count.participants} deltagere`],
       actions: [
@@ -68,7 +69,7 @@ export default async function DmuCalendarPage({
         { label: "Klub", value: event.club.name },
         { label: "Lokation", value: event.location },
         { label: "Skabelon", value: survey?.surveyTemplate.name ?? "Ingen tilknyttet skabelon" },
-        { label: "Sendetidspunkt", value: formatDateTime(scheduledSend?.sendAt) },
+        { label: "Tidligst afsendelse (dansk tid)", value: formatDateTime(scheduledSend?.sendAt) },
         { label: "Status", value: status },
       ],
     };

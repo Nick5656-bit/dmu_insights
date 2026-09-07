@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
 import { ClubComparisonChart } from "@/components/charts/benchmark-bar-chart";
-import { QuestionDistributionBoard } from "@/components/charts/question-distribution-board";
+import { SurveyResultsPanel } from "@/components/survey-results-panel";
+import { loadSurveyResults } from "@/lib/survey-results.server";
+import { SUPPRESSION_THRESHOLD, surveyYearWhere } from "@/lib/survey-results";
 import { ClubMultiSelectFilter } from "@/components/club-multi-select-filter";
-import { OpenTextQuestionSelect } from "@/components/open-text-question-select";
-import { TextResponsesModal } from "@/components/text-responses-modal";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -13,7 +13,6 @@ import {
   dashboardRespondentRoleOptions,
 } from "@/lib/survey-segments";
 
-const SUPPRESSION_THRESHOLD = 5;
 
 const surveyActionLinks = [
   { href: "/dmu/send", label: "Udsend spørgeskema" },
@@ -28,6 +27,8 @@ type DmuDashboardProps = {
     surveyTemplateId?: string;
     clubIds?: string | string[];
     textQuestionId?: string;
+    year?: string;
+    dataMode?: string;
   }>;
 };
 
@@ -43,8 +44,13 @@ function parseClubIds(rawValue: string | string[] | undefined): string[] {
 export default async function DmuDashboardPage({ searchParams }: DmuDashboardProps) {
   await requireRole("DMU_ADMIN");
   const params = await searchParams;
+  const isTest = params.dataMode === "test";
+  const dataScope = { club: { isTest } };
+  const currentYear = new Date().getUTCFullYear();
+  const selectedYear = params.year === "all" ? null : /^\d{4}$/.test(params.year ?? "") ? Number(params.year) : currentYear;
+  const yearWhere = selectedYear ? surveyYearWhere(selectedYear) : {};
 
-  const clubs = await prisma.club.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+  const clubs = await prisma.club.findMany({ where: { active: true, isTest }, orderBy: { name: "asc" } });
 
   const selectedClubIds = parseClubIds(params.clubIds);
   const selectedClubs = clubs.filter((club) => selectedClubIds.includes(club.id));
@@ -53,6 +59,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     where: {
       surveyInstances: {
         some: {
+          ...dataScope,
           ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
         },
       },
@@ -63,7 +70,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
       surveyType: true,
       _count: {
         select: {
-          surveyInstances: true,
+          surveyInstances: { where: dataScope },
         },
       },
     },
@@ -76,6 +83,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         await prisma.surveyInstance.findMany({
           where: {
             surveyTemplateId: selectedTemplate.id,
+            ...dataScope,
             ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
           },
           select: { id: true },
@@ -94,6 +102,8 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     : undefined;
 
   const activeFilters = [
+    isTest ? "Testdata" : "Pilotdata",
+    ...(selectedYear ? [`Udsendelsesår: ${selectedYear}`] : []),
     ...(selectedTemplate ? [`Skabelon: ${selectedTemplate.name}`] : []),
     ...(selectedClubs.length > 0 ? [`Klubber: ${selectedClubs.length}`] : []),
     ...(respondentAgeGroupFilter
@@ -108,6 +118,8 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
   ];
 
   const exportParams = new URLSearchParams();
+  exportParams.set("dataMode", isTest ? "test" : "pilot");
+  exportParams.set("year", selectedYear ? String(selectedYear) : "all");
   if (selectedClubIds.length > 0) exportParams.set("clubIds", selectedClubIds.join(","));
   if (selectedTemplate) exportParams.set("surveyTemplateId", selectedTemplate.id);
   if (respondentAgeGroupFilter) exportParams.set("respondentAgeGroup", respondentAgeGroupFilter);
@@ -115,7 +127,14 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
   if (respondentRoleFilter) exportParams.set("respondentRole", respondentRoleFilter);
   const exportHref = `/api/exports/results${exportParams.size > 0 ? `?${exportParams.toString()}` : ""}`;
 
+  const instanceWhere = {
+    ...dataScope,
+    ...yearWhere,
+    ...(selectedTemplate ? { surveyTemplateId: selectedTemplate.id } : {}),
+    ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
+  };
   const responseWhere = {
+    surveyInstance: instanceWhere,
     ...(selectedTemplate ? { surveyInstanceId: { in: selectedTemplateInstanceIds } } : {}),
     ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
     ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
@@ -123,201 +142,48 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
   };
 
-  const [totalResponses, benchmarkQuestions] = await Promise.all([
+  const [totalResponses, results] = await Promise.all([
     prisma.surveyResponse.count({ where: responseWhere }),
-    prisma.question.findMany({
-      where: {
-        scope: "DMU_STANDARD",
-        benchmarkKey: { not: null },
-        questionType: "SCALE_1_5",
-      },
-      orderBy: { createdAt: "asc" },
-    }),
+    loadSurveyResults(responseWhere, instanceWhere),
   ]);
 
-  const benchmarkRows: {
-    questionTitle: string;
-    category: string;
-    avg: number | null;
-    count: number;
-    suppressed: boolean;
-    distribution: { label: string; value: number }[];
-  }[] = [];
-
-  for (const question of benchmarkQuestions) {
-    const numericAnswers = await prisma.surveyAnswer.findMany({
-      where: {
-        questionId: question.id,
-        numericValue: { not: null },
-        surveyResponse: responseWhere,
-      },
-      select: { numericValue: true },
-    });
-
-    const count = numericAnswers.length;
-    const category = question.benchmarkKey ? question.benchmarkKey.split("_")[0] : "Generel";
-    const distribution = [1, 2, 3, 4, 5].map((scaleValue) => ({
-      label: String(scaleValue),
-      value: numericAnswers.filter((answer) => answer.numericValue === scaleValue).length,
-    }));
-
-    if (count < SUPPRESSION_THRESHOLD) {
-      benchmarkRows.push({
-        questionTitle: question.title,
-        category,
-        avg: null,
-        count,
-        suppressed: true,
-        distribution,
-      });
-      continue;
-    }
-
-    const agg = await prisma.surveyAnswer.aggregate({
-      where: {
-        questionId: question.id,
-        numericValue: { not: null },
-        surveyResponse: responseWhere,
-      },
-      _avg: { numericValue: true },
-    });
-
-    benchmarkRows.push({
-      questionTitle: question.title,
-      category,
-      avg: agg._avg.numericValue ? Number(agg._avg.numericValue.toFixed(2)) : null,
-      count,
-      suppressed: false,
-      distribution,
-    });
-  }
-
   const clubsInScope = selectedClubs.length > 0 ? selectedClubs : clubs;
-  const keyQuestion = benchmarkQuestions[0];
+  const keyQuestion = results.find((result) => result.benchmarkKey === "SATISFACTION_OVERALL" && !result.suppressed)
+    ?? results.find((result) => result.questionType === "SCALE_1_5" && result.benchmarkKey && !result.suppressed);
   const clubComparisonRows: { label: string; own: number; benchmark: number }[] = [];
-  const shouldShowClubComparison = selectedClubs.length >= 2;
-  const comparisonTemplateInstanceIds =
-    shouldShowClubComparison && selectedTemplate
-      ? (
-          await prisma.surveyInstance.findMany({
-            where: { surveyTemplateId: selectedTemplate.id },
-            select: { id: true },
-          })
-        ).map((instance) => instance.id)
-      : [];
-  const comparisonResponseWhere = {
-    ...(selectedTemplate ? { surveyInstanceId: { in: comparisonTemplateInstanceIds } } : {}),
-    ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
-    ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
-    ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
-  };
-
-  let nationalKeyAverage = 0;
-  if (shouldShowClubComparison && keyQuestion) {
-    const nationalCount = await prisma.surveyAnswer.count({
-      where: {
-        questionId: keyQuestion.id,
-        numericValue: { not: null },
-        surveyResponse: comparisonResponseWhere,
-      },
-    });
-
-    if (nationalCount >= SUPPRESSION_THRESHOLD) {
-      const nationalAgg = await prisma.surveyAnswer.aggregate({
-        where: {
-          questionId: keyQuestion.id,
-          numericValue: { not: null },
-          surveyResponse: comparisonResponseWhere,
-        },
-        _avg: { numericValue: true },
-      });
-      nationalKeyAverage = Number((nationalAgg._avg.numericValue ?? 0).toFixed(2));
-    }
-
-    for (const club of selectedClubs) {
-      const clubCountForKeyQuestion = await prisma.surveyAnswer.count({
-        where: {
-          questionId: keyQuestion.id,
-          numericValue: { not: null },
-          surveyResponse: {
-            ...comparisonResponseWhere,
-            clubId: club.id,
-          },
-        },
-      });
-
-      if (clubCountForKeyQuestion < SUPPRESSION_THRESHOLD || nationalKeyAverage === 0) {
-        continue;
+  const shouldShowClubComparison = selectedClubs.length >= 2 && Boolean(selectedTemplate && selectedYear);
+  if (shouldShowClubComparison && keyQuestion && selectedTemplate) {
+    const comparisonInstanceWhere = { ...dataScope, ...yearWhere, surveyTemplateId: selectedTemplate.id };
+    // The national benchmark includes only clubs that independently meet the
+    // minimum for this question. A small club cannot be recovered by subtraction.
+    const clubResults = await Promise.all(clubs.map(async (club) => {
+      const perClubWhere = { ...comparisonInstanceWhere, clubId: club.id };
+      const perClub = await loadSurveyResults({
+        ...responseWhere, clubId: club.id, surveyInstanceId: undefined,
+        surveyInstance: perClubWhere,
+      }, perClubWhere);
+      return { club, result: perClub.find((result) => result.questionId === keyQuestion.questionId) };
+    }));
+    const eligible = clubResults.filter(({ result }) => result && !result.suppressed && result.avg !== null);
+    const count = eligible.reduce((sum, { result }) => sum + result!.count, 0);
+    const benchmark = count ? eligible.reduce((sum, { result }) => sum + result!.avg! * result!.count, 0) / count : null;
+    if (benchmark !== null) {
+      for (const { club, result } of eligible) {
+        if (selectedClubIds.includes(club.id)) clubComparisonRows.push({ label: club.name, own: result!.avg!, benchmark: Number(benchmark.toFixed(2)) });
       }
-
-      const clubAgg = await prisma.surveyAnswer.aggregate({
-        where: {
-          questionId: keyQuestion.id,
-          numericValue: { not: null },
-          surveyResponse: {
-            ...comparisonResponseWhere,
-            clubId: club.id,
-          },
-        },
-        _avg: { numericValue: true },
-      });
-
-      const clubAvg = Number((clubAgg._avg.numericValue ?? 0).toFixed(2));
-      clubComparisonRows.push({
-        label: club.name.length > 20 ? `${club.name.slice(0, 20)}...` : club.name,
-        own: clubAvg,
-        benchmark: nationalKeyAverage,
-      });
     }
   }
-
-  const textAnswerCounts = await prisma.surveyAnswer.groupBy({
-    by: ["questionId"],
-    where: {
-      textValue: { not: "" },
-      question: { active: true, questionType: "TEXT" },
-      surveyResponse: responseWhere,
-    },
-    _count: { _all: true },
-  });
-
-  const eligibleTextQuestionIds = textAnswerCounts
-    .filter((entry) => entry._count._all >= SUPPRESSION_THRESHOLD)
-    .map((entry) => entry.questionId);
-  const textQuestionCounts = new Map(textAnswerCounts.map((entry) => [entry.questionId, entry._count._all]));
-  const textQuestions =
-    eligibleTextQuestionIds.length > 0
-      ? await prisma.question.findMany({
-          where: { id: { in: eligibleTextQuestionIds }, active: true, questionType: "TEXT" },
-          select: { id: true, title: true },
-          orderBy: { title: "asc" },
-        })
-      : [];
-  const selectedTextQuestion = textQuestions.find((question) => question.id === params.textQuestionId) ?? textQuestions[0];
-
-  const textResponses = selectedTextQuestion
-    ? await prisma.surveyAnswer.findMany({
-        where: {
-          questionId: selectedTextQuestion.id,
-          textValue: { not: "" },
-          surveyResponse: responseWhere,
-        },
-        select: { textValue: true },
-        orderBy: { surveyResponse: { submittedAt: "desc" } },
-      })
-    : [];
-
-  const visibleBenchmarkCount = benchmarkRows.filter((row) => !row.suppressed).length;
 
   const summaryCards = [
     { label: "Besvarelser", value: totalResponses, hint: "I valgt udsnit" },
     { label: "Klubber", value: clubsInScope.length, hint: selectedClubs.length > 0 ? "Udvalgte klubber" : "Aktive klubber" },
-    { label: "Benchmarks", value: benchmarkQuestions.length, hint: "Skala 1-5" },
+    { label: "Spørgsmål", value: results.length, hint: "Skala, valgmuligheder og tekst" },
     { label: "Filtre", value: activeFilters.length, hint: activeFilters.length > 0 ? "Aktive" : "Ingen valgt" },
   ];
 
   return (
     <div className="space-y-6">
+      <div className="rounded-2xl border bg-muted/20 p-4 text-sm" role="status">{isTest ? "Du ser testdata. De indgår ikke i pilotens resultater." : "Du ser pilotdata. Testklubber er ikke med."} <Link className="ml-2 underline" href={`/dmu/dashboard?dataMode=${isTest ? "pilot" : "test"}`}>{isTest ? "Vis pilotdata" : "Vis testdata"}</Link></div>
       {/* ── Filterpanel ─────────────────────────────────────────────────── */}
       <section className="overflow-visible rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
 
@@ -366,6 +232,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
 
         {/* Filterrækken */}
         <form className="mt-4 grid gap-2 rounded-[24px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm md:grid-cols-7" method="get">
+          <input type="hidden" name="dataMode" value={isTest ? "test" : "pilot"} />
           <ClubMultiSelectFilter clubs={clubs} initialSelectedIds={selectedClubIds} />
 
           {/* Skabelon */}
@@ -384,6 +251,14 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
+
+          <label className="text-sm text-white">
+            Udsendelsesår
+            <select name="year" defaultValue={selectedYear ?? "all"} className="h-11 w-full rounded-2xl bg-background px-3 text-foreground">
+              <option value="all">Alle år (ingen klubsammenligning)</option>
+              {[...new Set([currentYear, currentYear - 1, currentYear - 2, currentYear - 3, ...(selectedYear ? [selectedYear] : [])])].sort((a, b) => b - a).map((year) => <option key={year} value={year}>{year}</option>)}
+            </select>
+          </label>
 
           {/* Alder */}
           <div className="relative md:col-span-1">
@@ -469,7 +344,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Klubsammenligning</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Sammenligning af udvalgte klubber mod nationalt niveau.</p>
+              <p className="mt-1 text-sm text-muted-foreground">{keyQuestion ? `${keyQuestion.questionTitle} · Samme skabelon og udsendelsesår. Benchmark omfatter klubber med mindst fem svar på spørgsmålet.` : "Vælg en skabelon med skalaspørgsmål til sammenligning."}</p>
             </div>
             <span className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">Skala 1-5</span>
           </div>
@@ -481,8 +356,8 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
               <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
                 <p className="font-medium text-foreground">Ingen resultater endnu</p>
                 <p className="mt-1">
-                  {selectedClubs.length < 2
-                    ? "Vælg mindst to klubber for at sammenligne deres resultater."
+                  {!shouldShowClubComparison
+                    ? "Vælg mindst to klubber, en skabelon og et år for at sammenligne deres resultater."
                     : `Sammenligning vises, når hver klub har mindst ${SUPPRESSION_THRESHOLD} svar på det samme spørgsmål.`}
                 </p>
               </div>
@@ -491,82 +366,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         </article>
       </section>
 
-      {/* ── Spørgsmålsfordeling ──────────────────────────────────────────── */}
-      <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Spørgsmålsfordeling</h2>
-          </div>
-          <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-            {visibleBenchmarkCount} spørgsmål med resultater
-          </span>
-        </div>
-
-        <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
-          <QuestionDistributionBoard rows={benchmarkRows} suppressionThreshold={SUPPRESSION_THRESHOLD} />
-        </div>
-      </section>
-
-      {/* ── Åbne svar ────────────────────────────────────────────────────── */}
-      {selectedTextQuestion ? (
-        <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Åbne svar</p>
-              {textQuestions.length === 1 ? (
-                <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground">{selectedTextQuestion.title}</h2>
-              ) : (
-                <div className="mt-2">
-                  <OpenTextQuestionSelect questions={textQuestions} selectedQuestionId={selectedTextQuestion.id} />
-                </div>
-              )}
-              <p className="mt-2 text-sm text-muted-foreground">Fritekstbesvarelser i det valgte udsnit.</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-                {textQuestionCounts.get(selectedTextQuestion.id) ?? 0} svar
-              </span>
-              <TextResponsesModal
-                questionTitle={selectedTextQuestion.title}
-                responses={textResponses.map((answer) => ({ text: answer.textValue ?? "" }))}
-                triggerLabel="Se alle"
-                showMetadata={false}
-              />
-            </div>
-          </div>
-
-          {textResponses.length > 0 ? (
-            <div className="mt-5 grid gap-3 lg:grid-cols-3">
-              {textResponses.slice(0, 3).map((response, index) => (
-                <article key={`${response.textValue}-${index}`} className="rounded-[22px] border border-border/70 bg-background/85 p-4">
-                  <p className="text-sm leading-6 text-foreground">{response.textValue}</p>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-5 rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-              Ingen åbne svar i det valgte udsnit.
-            </div>
-          )}
-        </section>
-      ) : (
-        <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Åbne svar</p>
-              <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground">Fritekstbesvarelser</h2>
-              <p className="mt-2 text-sm text-muted-foreground">Kommentarer vises her, når et fritekstspørgsmål har et tilstrækkeligt datagrundlag.</p>
-            </div>
-            <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-              Ingen resultater endnu
-            </span>
-          </div>
-
-          <div className="mt-5 rounded-[22px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-            Åbne svar vises, når der er mindst {SUPPRESSION_THRESHOLD} svar på et fritekstspørgsmål.
-          </div>
-        </section>
-      )}
+      <SurveyResultsPanel results={results} textQuestionId={params.textQuestionId} />
     </div>
   );
 }
