@@ -1,4 +1,16 @@
-# Pilotklargøring — status 7. september 2026
+# Pilotklargøring — status 8. september 2026
+
+## Release og nulstilling til afprøvning
+
+Brugeren har nu godkendt push af sikkerhedsopdatering og adgangsrettelse. Tidligere bemærkninger om, at ændringerne ikke er pushet, beskriver status ved de respektive kontroller. Testindholdet er ryddet fra den tilknyttede database efter krypteret sikkerhedskopi; de to loginbrugere og testklubben er bevaret. Se [oprydningsrapporten](test-data-cleanup.md). Ingen migration er nødvendig for denne kode-release. Vercels release-status kontrolleres særskilt efter push.
+
+## Seneste kontrol: adgang mellem klubber
+
+20 nye automatiske adgangstests med to fiktive klubber består; samlet består 75 tests. Testene fandt en kalenderfejl ved manglende klubtilknytning, som efter brugerens godkendelse er rettet til at afvise adgang før databaseopslag. Normale klubkonti og DMU's adgang består de testede scenarier. Dette er **lokale ændringer, endnu ikke pushet/deployet**; ingen aktive data eller mails er ændret. Se [adgangstesten](club-access-check.md) for dækning og begrænsninger. Generalprøven med separat testdatabase og rigtige browser-sessioner udestår fortsat.
+
+## Seneste kontrol: sikkerhedsopdatering
+
+Opgave 1 er nu gennemført **lokalt, endnu ikke deployet**. Next.js, React, Prisma og relevante underafhængigheder er opdateret; `npm audit` finder 0 kendte sårbarheder. 55 tests, TypeScript, lint, Prisma-validering og produktionsbuild består. Lokal HTTP-kontrol af offentlige sider og adgangsafvisning består. Se [sikkerhedsopdateringen](security-upgrade.md) for versioner, den afgrænsede Prisma-override og resterende generalprøve. Tidligere punkter om udestående pakkeopdatering nedenfor er historisk status; testmiljø, backup/restore, organisatoriske godkendelser og udfasning af demo-adgang udestår fortsat.
 
 ## Releaseopdatering 7. september
 

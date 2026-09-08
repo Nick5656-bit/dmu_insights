@@ -17,10 +17,20 @@ const surveyStatusLabel: Record<string, string> = {
 
 export default async function ClubEventsPage() {
   const session = await requireRole("CLUB_ADMIN");
+  if (!session.clubId) {
+    return (
+      <section className="rounded-xl border bg-background p-6">
+        <h1 className="text-2xl font-semibold">Arrangementer</h1>
+        <p role="alert" className="mt-2 text-sm text-muted-foreground">
+          Din konto er ikke tilknyttet en klub. Kontakt DMU for hjælp.
+        </p>
+      </section>
+    );
+  }
   const todayKey = new Date().toISOString().slice(0, 10);
 
   const events = await prisma.event.findMany({
-    where: { clubId: session.clubId ?? undefined },
+    where: { clubId: session.clubId },
     include: {
       surveyInstances: {
         include: {
