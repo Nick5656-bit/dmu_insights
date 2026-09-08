@@ -49,6 +49,12 @@ export function LoginForm({ error }: { error?: string }) {
         </div>
       </div>
 
+      <label className="mt-4 flex items-center gap-2 text-sm">
+        <input type="checkbox" name="rememberMe" className="h-4 w-4 shrink-0" />
+        Forbliv logget ind i 30 dage
+      </label>
+      <p className="mt-1 text-xs text-muted-foreground">Brug kun dette på din egen enhed.</p>
+
       {error ? (
         <div className="mt-4 rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}

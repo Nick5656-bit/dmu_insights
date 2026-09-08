@@ -2,7 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ClubDeliveryTabs } from "@/components/club-delivery-tabs";
-import { requireRole } from "@/lib/auth";
+import { requireLegacyClubRole as requireRole } from "@/lib/legacy-club-access";
 import { prisma } from "@/lib/prisma";
 import { SubmitButton } from "@/components/submit-button";
 

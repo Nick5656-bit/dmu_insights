@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 import { DmuLogo } from "@/components/dmu-logo";
 import { LoginForm } from "@/components/login-form";
 
@@ -64,31 +63,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </div>
 
             <LoginForm error={error} />
-
-            <div className="mt-5 rounded-[1.6rem] border bg-muted/22 p-5 text-sm text-muted-foreground">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-semibold text-foreground">Demo-login</p>
-                <Link
-                  href="/survey/demo-token"
-                  className="rounded-full border px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-background"
-                >
-                  Survey-link
-                </Link>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <article className="rounded-[1.2rem] border bg-background/90 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">DMU</p>
-                  <p className="mt-2 font-medium text-foreground">admin@dmu.dk</p>
-                  <p className="text-muted-foreground">demo1234</p>
-                </article>
-                <article className="rounded-[1.2rem] border bg-background/90 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Klub</p>
-                  <p className="mt-2 font-medium text-foreground">klub1@dmu.dk</p>
-                  <p className="text-muted-foreground">demo1234</p>
-                </article>
-              </div>
-            </div>
 
           </div>
         </section>

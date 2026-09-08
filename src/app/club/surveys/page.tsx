@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { CalendarDays, ClipboardList, Plus, Sparkles } from "lucide-react";
 import { SurveyStatus, SurveyType } from "@prisma/client";
 import { z } from "zod";
-import { requireRole } from "@/lib/auth";
+import { requireLegacyClubRole as requireRole } from "@/lib/legacy-club-access";
 import { prisma } from "@/lib/prisma";
 import { SubmitButton } from "@/components/submit-button";
 

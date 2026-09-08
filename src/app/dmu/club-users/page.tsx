@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
-import { pilotUserSchema } from "@/lib/pilot-setup";
+import { passwordSchema, pilotUserSchema } from "@/lib/pilot-setup";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DeleteClubUserButton } from "@/components/delete-club-user-button";
@@ -88,11 +88,11 @@ export default async function DmuClubUsersPage({
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
 
-    if (!userId || !name || !email) {
+    if (!userId || !pilotUserSchema.omit({ password: true }).safeParse({ name, email }).success) {
       redirect("/dmu/settings/club-users?error=invalid_edit_input");
     }
 
-    if (password && password.length < 6) {
+    if (password && !passwordSchema.safeParse(password).success) {
       redirect("/dmu/settings/club-users?error=invalid_edit_password");
     }
 
@@ -124,8 +124,8 @@ export default async function DmuClubUsersPage({
   const errorMessages: Record<string, string> = {
     invalid_input: "Vælg en aktiv klub, en gyldig e-mail og en adgangskode på mindst 12 tegn (højst 72 UTF-8 bytes).",
     has_history: "Brugeren kan ikke slettes, fordi der er historik knyttet til den.",
-    invalid_edit_input: "Navn og e-mail skal udfyldes ved redigering.",
-    invalid_edit_password: "Ny adgangskode skal være mindst 12 tegn.",
+    invalid_edit_input: "Angiv et navn på 2–100 tegn og en gyldig e-mailadresse.",
+    invalid_edit_password: "Ny adgangskode skal være mindst 12 tegn (højst 72 UTF-8 bytes).",
     email_taken: "E-mailadressen er allerede registreret i systemet.",
     user_not_found: "Brugeren blev ikke fundet.",
   };

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getHomePathForRole } from "@/lib/auth";
 import { encryptSession, sessionCookieName } from "@/lib/session";
+import { sessionVersion } from "@/lib/session-version";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -62,14 +63,14 @@ export async function POST(request: Request) {
       return NextResponse.redirect(new URL("/login?error=invalid_input", request.url));
     }
 
-    const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email }, include: { club: { select: { active: true } } } });
     if (!user) {
       await recordAttempt(ip, false);
       return NextResponse.redirect(new URL("/login?error=invalid_credentials", request.url));
     }
 
     const isValid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-    if (!isValid) {
+    if (!isValid || (user.role === "CLUB_ADMIN" && (!user.clubId || !user.club?.active))) {
       await recordAttempt(ip, false);
       return NextResponse.redirect(new URL("/login?error=invalid_credentials", request.url));
     }
@@ -77,13 +78,15 @@ export async function POST(request: Request) {
     // Succesfuldt login – nulstil forsøg for denne IP
     await recordAttempt(ip, true);
 
+    const rememberMe = formData.get("rememberMe") === "on";
     const { token, expiresAt } = await encryptSession({
       userId: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       clubId: user.clubId,
-    });
+      version: sessionVersion(user),
+    }, rememberMe);
 
     const response = NextResponse.redirect(new URL(getHomePathForRole(user.role), request.url));
     response.cookies.set(sessionCookieName, token, {
@@ -91,7 +94,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      expires: new Date(expiresAt * 1000),
+      ...(rememberMe ? { expires: new Date(expiresAt * 1000) } : {}),
     });
 
     return response;

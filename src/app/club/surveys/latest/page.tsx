@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireLegacyClubRole as requireRole } from "@/lib/legacy-club-access";
 import { prisma } from "@/lib/prisma";
 
 export default async function ClubLatestSurveyPage() {

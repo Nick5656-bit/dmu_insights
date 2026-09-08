@@ -136,14 +136,25 @@ function fixture() {
 
 function harness(clubId: string | null = "club-a", role: SessionPayload["role"] = "CLUB_ADMIN") {
   const data = fixture();
-  const current: { session: SessionPayload | null } = { session: { userId: "test-user", name: "Test admin", email: "admin@example.test", role, clubId, exp: Math.floor(Date.now() / 1000) + 3600 } };
+  const current: { session: SessionPayload | null; allowLegacy: boolean } = { allowLegacy: true, session: { userId: "test-user", name: "Test admin", email: "admin@example.test", role, clubId, version: "test-version", exp: Math.floor(Date.now() / 1000) + 3600 } };
   const navigation = { redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); }, notFound: () => { throw new Error("NOT_FOUND"); } };
   const auth = loadTestModule<typeof Auth>("src/lib/auth.ts", {
     "next/headers": { cookies: async () => ({ get: () => current.session ? { value: "in-memory-token" } : undefined }) },
     "next/navigation": navigation,
     "@/lib/session": { sessionCookieName: "test-session", decryptSession: async () => current.session },
+    "@/lib/session-version": { sessionVersion: () => "test-version" },
+    "@/lib/prisma": { prisma: { user: { findUnique: async () => current.session ? {
+      ...current.session, id: current.session.userId, passwordHash: "test-hash", club: { active: true },
+    } : null } } },
+  });
+  const legacyGate = loadTestModule<{ requireLegacyClubRole: typeof auth.requireRole }>("src/lib/legacy-club-access.ts", {
+    "@/lib/auth": auth, "next/navigation": navigation,
   });
   const overrides = {
+    // Exercise retained code's ownership checks independently of the pilot gate.
+    // Separate tests assert that the real gate denies pages AND actions.
+    "@/lib/legacy-club-access": { requireLegacyClubRole: (role: SessionPayload["role"]) =>
+      current.allowLegacy ? auth.requireRole(role) : legacyGate.requireLegacyClubRole(role) },
     "@/lib/auth": auth, "@/lib/prisma": { prisma: data.db }, "next/navigation": navigation,
     "next/cache": { revalidatePath() {} },
     "next/link": Widget,
@@ -173,6 +184,27 @@ function action(tree: unknown, name: string): Action {
   const found = findElements(tree, "form").map(element => element.props.action).find(candidate => typeof candidate === "function" && candidate.name === name);
   assert.equal(typeof found, "function", `Missing action ${name}`); return found as Action;
 }
+
+test("pilot gate blocks legacy pages and retained server actions before data access", async () => {
+  const h = harness();
+  h.current.allowLegacy = false;
+  for (const route of ["surveys", "surveys/[id]", "surveys/latest", "questions", "mail-log", "outbox"]) {
+    await assert.rejects(h.page(`club/${route}`), /NOT_FOUND/);
+  }
+  assert.equal(h.queries.length, 0);
+  // Simulate a previously rendered page; closing access must still block actions.
+  h.current.allowLegacy = true;
+  const tree = await h.page("club/surveys/[id]");
+  h.current.allowLegacy = false;
+  const reads = h.queries.length;
+  for (const element of findElements(tree, "form")) {
+    if (typeof element.props.action === "function") {
+      await assert.rejects((element.props.action as Action)(form({ surveyInstanceId: "survey-a" })), /NOT_FOUND/);
+    }
+  }
+  assert.equal(h.queries.length, reads);
+  assert.equal(h.writes.length, 0);
+});
 
 for (const own of ["a", "b"]) {
   const other = own === "a" ? "b" : "a";
@@ -237,16 +269,14 @@ test("actual role guard rejects anonymous users and club users at the DMU dashbo
 
 test("club without membership cannot export or read dashboard results", async () => {
   const h = harness(null);
-  assert.equal((await h.csv()).status, 403);
-  assert.match(JSON.stringify(await h.page("club/dashboard")), /mangler klubtilknytning/);
+  assert.equal((await h.csv()).status, 401);
+  await assert.rejects(h.page("club/dashboard"), /REDIRECT:\/login/);
   assert.equal(h.queries.length, 0);
 });
 
 test("club without membership must not see either club's calendar", async () => {
   const h = harness(null);
-  const tree = await h.page("club/events");
-  assert.doesNotMatch(JSON.stringify(tree), /Private event [AB]/);
-  assert.match(JSON.stringify(tree), /ikke tilknyttet en klub/);
+  await assert.rejects(h.page("club/events"), /REDIRECT:\/login/);
   assert.equal(h.queries.length, 0, "Fail closed before any database read");
 });
 

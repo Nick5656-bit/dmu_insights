@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ClubDeliveryTabs } from "@/components/club-delivery-tabs";
-import { requireRole } from "@/lib/auth";
+import { requireLegacyClubRole as requireRole } from "@/lib/legacy-club-access";
 import { prisma } from "@/lib/prisma";
 
 const invitationStatusLabel: Record<string, string> = {

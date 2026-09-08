@@ -1,7 +1,7 @@
 import { QuestionType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireRole } from "@/lib/auth";
+import { requireLegacyClubRole as requireRole } from "@/lib/legacy-club-access";
 import { prisma } from "@/lib/prisma";
 import { editUnusedQuestion, deleteUnusedQuestion, copyQuestion, type QuestionEditResult } from "@/lib/question-editing";
 import { ClubQuestionCreateForm } from "./club-question-create-form";

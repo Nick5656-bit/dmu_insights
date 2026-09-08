@@ -2,7 +2,7 @@ import { QuestionType } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireRole } from "@/lib/auth";
+import { requireLegacyClubRole as requireRole } from "@/lib/legacy-club-access";
 import { prisma } from "@/lib/prisma";
 import { createSurveyToken, hashSurveyToken } from "@/lib/survey-token";
 import { SubmitButton } from "@/components/submit-button";

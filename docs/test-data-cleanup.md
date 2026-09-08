@@ -1,5 +1,11 @@
 # Oprydning før ny afprøvning — 8. september 2026
 
+## Efterfølgende kluboprydning
+
+Efter særskilt brugerønske blev den tomme Aarhus Motorsport Klub og dens klubadministrator også slettet. Før sletning blev relationstællere kontrolleret igen (alle indholdsrelationer 0), og begge slettede rækker blev krypteret med samme backupformat som nedenfor i `.local-backups/test-club-2026-09-08T08-30-24-883Z.json.enc`. Denne kopi indeholder også klubbrugerens password-hash og må ikke deles eller lægges i Git. Dekryptering er verificeret før sletning.
+
+Efter transaktionen: 0 klubber og 1 bruger. Den eksisterende DMU-testadministrator er verificeret uændret. Ingen officiel DMU-administrator er oprettet. Den offentlige demo-loginboks og døde demo-surveylink er fjernet i koden; denne efterfølgende kodeændring er ikke pushet/deployet endnu. At skjule loginoplysninger deaktiverer ikke den bevarede DMU-testkonto. Allerede udstedte sessions bruger fortsat deres normale udløbstid; sessionmekanismen er ikke ændret i denne oprydning.
+
 ## Kodeudgivelse
 
 Ændringerne blev pushet i `b946d69`. Vercels første build fejlede med `ENOENT .next/next-server.js.nft.json`, selv om lokal build bestod. Det matcher [Next.js #96646](https://github.com/vercel/next.js/issues/96646): Next.js 16.3's Vercel-adapter kombineret med `output: standalone`. Opfølgende rettelse slår kun standalone-output fra, når `VERCEL=1`; lokale/selvhostede builds bevarer det. Ingen sikkerhedsopdatering rulles tilbage. Datarydningen var allerede gennemført og er uafhængig af denne buildfejl.
