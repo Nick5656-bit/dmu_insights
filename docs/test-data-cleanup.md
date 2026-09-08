@@ -1,5 +1,9 @@
 # Oprydning før ny afprøvning — 8. september 2026
 
+## Kodeudgivelse
+
+Ændringerne blev pushet i `b946d69`. Vercels første build fejlede med `ENOENT .next/next-server.js.nft.json`, selv om lokal build bestod. Det matcher [Next.js #96646](https://github.com/vercel/next.js/issues/96646): Next.js 16.3's Vercel-adapter kombineret med `output: standalone`. Opfølgende rettelse slår kun standalone-output fra, når `VERCEL=1`; lokale/selvhostede builds bevarer det. Ingen sikkerhedsopdatering rulles tilbage. Datarydningen var allerede gennemført og er uafhængig af denne buildfejl.
+
 Brugeren godkendte at fjerne alle tidligere testdata, alle skabeloner/begivenheder og også hele spørgsmålsbanken. Brugere og testklub skulle bevares til fortsat afprøvning.
 
 ## Udført på den tilknyttede database
