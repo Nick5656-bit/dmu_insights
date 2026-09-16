@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
 type Props = Omit<React.ComponentProps<"button">, "type" | "children"> & {
@@ -45,47 +44,6 @@ export function SubmitButton({ children, pendingText, className, disabled, confi
         onClick?.(event);
       }}>
       {pending ? (
-        <span className="flex items-center justify-center gap-2">
-          <LoadingSpinner />
-          {pendingText ?? children}
-        </span>
-      ) : (
-        children
-      )}
-    </button>
-  );
-}
-
-type DetachedSubmitButtonProps = Props & {
-  form: string;
-};
-
-// Used only where HTML requires the submit button to sit outside its associated form.
-export function DetachedSubmitButton({ children, pendingText, form, className, disabled, onClick, ...buttonProps }: DetachedSubmitButtonProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  return (
-    <button
-      {...buttonProps}
-      type="submit"
-      form={form}
-      disabled={isSubmitting || disabled}
-      className={className}
-      onClick={(event) => {
-        onClick?.(event);
-        if (event.defaultPrevented) {
-          return;
-        }
-
-        const linkedForm = document.getElementById(form) as HTMLFormElement | null;
-        if (linkedForm && !linkedForm.checkValidity()) {
-          return;
-        }
-
-        setIsSubmitting(true);
-      }}
-    >
-      {isSubmitting ? (
         <span className="flex items-center justify-center gap-2">
           <LoadingSpinner />
           {pendingText ?? children}

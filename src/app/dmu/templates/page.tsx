@@ -5,16 +5,13 @@ import { z } from "zod";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { lockUnusedTemplate, TEMPLATE_LOCKED_MESSAGE } from "@/lib/template-editing";
-import { DetachedSubmitButton, SubmitButton } from "@/components/submit-button";
+import { SubmitButton } from "@/components/submit-button";
+import { randomUUID } from "node:crypto";
+import { CreateTemplateForm } from "./create-template-form";
+import { createTemplateAction } from "./create-template-action";
 import { TemplateStructureEditor } from "./template-structure-editor";
 import { TemplateCreatedNotice } from "./template-created-notice";
 
-const createTemplateSchema = z.object({
-  name: z.string().trim().min(3),
-  description: z.string().trim().min(1),
-  surveyType: z.nativeEnum(SurveyType),
-  questionIds: z.array(z.string().min(1)).optional().default([]),
-});
 
 const updateTemplateSchema = z.object({
   templateId: z.string().min(1),
@@ -81,123 +78,22 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
       ? "NO_BENCHMARK"
       : normalizeKeyPart(params.benchmarkCategory ?? "") || "";
 
-  const [questions, questionCategorySource, templates] = await Promise.all([
+  const [questions, templates] = await Promise.all([
     prisma.question.findMany({
-      where: {
-        scope: "DMU_STANDARD",
-        active: true,
-        ...(selectedCategoryFilter === "NO_BENCHMARK"
-          ? { benchmarkKey: null }
-          : selectedCategoryFilter
-            ? { benchmarkKey: { startsWith: `${selectedCategoryFilter}_` } }
-            : {}),
-      },
+      where: { scope: "DMU_STANDARD", active: true },
+      select: { id: true, title: true, questionType: true, benchmarkKey: true },
       orderBy: { createdAt: "asc" },
-    }),
-    prisma.question.findMany({
-      where: {
-        scope: "DMU_STANDARD",
-        active: true,
-        benchmarkKey: { not: null },
-      },
-      select: { benchmarkKey: true },
     }),
     prisma.surveyTemplate.findMany({
       include: {
-        _count: {
-          select: {
-            surveyInstances: true,
-          },
-        },
-        templateQuestions: {
-          include: { question: true },
-          orderBy: { sortOrder: "asc" },
-        },
+        _count: { select: { surveyInstances: true } },
+        templateQuestions: { include: { question: true }, orderBy: { sortOrder: "asc" } },
       },
       orderBy: { createdAt: "desc" },
     }),
   ]);
-
-  const benchmarkCategoryOptions = [...new Set(
-    questionCategorySource
-      .map((question) => normalizeKeyPart(question.benchmarkKey?.split("_")[0] ?? ""))
-      .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b, "da"));
   const createdTemplateId = templates.some((template) => template.id === params.created) ? params.created : undefined;
 
-  async function createTemplateAction(formData: FormData) {
-    "use server";
-    await requireRole("DMU_ADMIN");
-
-    const questionIds = formData
-      .getAll("questionIds")
-      .map((value) => String(value))
-      .filter(Boolean);
-
-    const parsed = createTemplateSchema.safeParse({
-      name: String(formData.get("name") ?? ""),
-      description: String(formData.get("description") ?? ""),
-      surveyType: String(formData.get("surveyType") ?? "") as SurveyType,
-      questionIds,
-    });
-
-    if (!parsed.success) {
-      return;
-    }
-
-    const selectedQuestions = await prisma.question.findMany({
-      where: {
-        id: { in: parsed.data.questionIds },
-        scope: "DMU_STANDARD",
-      },
-      select: {
-        id: true,
-        benchmarkKey: true,
-      },
-    });
-
-    const template = await prisma.surveyTemplate.create({
-      data: {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        surveyType: parsed.data.surveyType,
-        isActive: false,
-      },
-    });
-
-    const selectedOrderMap = new Map(parsed.data.questionIds.map((questionId, index) => [questionId, index + 1]));
-    const createRows = selectedQuestions
-      .sort((left, right) => (selectedOrderMap.get(left.id) ?? 0) - (selectedOrderMap.get(right.id) ?? 0))
-      .map((question) => ({
-        surveyTemplateId: template.id,
-        questionId: question.id,
-        sortOrder: selectedOrderMap.get(question.id) ?? 1,
-        required: true,
-        isCoreBenchmarkQuestion: Boolean(question.benchmarkKey),
-      }));
-
-    if (createRows.length > 0) {
-      await prisma.surveyTemplateQuestion.createMany({ data: createRows });
-    }
-    await prisma.surveyTemplate.update({
-      where: { id: template.id },
-      data: {
-        layoutJson: {
-          version: 1,
-          items: createRows.map((row) => ({
-            id: `question-${row.questionId}`,
-            kind: "QUESTION",
-            questionId: row.questionId,
-            required: row.required,
-            isCore: row.isCoreBenchmarkQuestion,
-          })),
-        },
-      },
-    });
-
-    revalidatePath("/dmu/templates");
-    redirect(`/dmu/templates?created=${template.id}`);
-  }
 
   async function updateTemplateAction(formData: FormData) {
     "use server";
@@ -427,77 +323,7 @@ export default async function DmuTemplatesPage({ searchParams }: DmuTemplatesPag
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Ny skabelon</h2>
 
-        <form id="create-template-form" action={createTemplateAction} className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="space-y-1 md:col-span-2">
-            <label htmlFor="name" className="text-sm font-medium">
-              Navn på skabelon
-            </label>
-            <input id="name" name="name" required className="w-full rounded-md border px-3 py-2 text-sm" />
-          </div>
-
-          <div className="space-y-1 md:col-span-2">
-            <label htmlFor="description" className="text-sm font-medium">
-              Beskrivelse
-            </label>
-            <input id="description" name="description" required className="w-full rounded-md border px-3 py-2 text-sm" />
-          </div>
-
-          <div className="space-y-1 md:col-span-2">
-            <label htmlFor="surveyType" className="text-sm font-medium">
-              Type
-            </label>
-            <select id="surveyType" name="surveyType" defaultValue="ANNUAL" className="w-full rounded-md border px-3 py-2 text-sm">
-              <option value="ANNUAL">Årlig</option>
-              <option value="EVENT">Arrangement</option>
-            </select>
-          </div>
-        </form>
-
-        <div className="mt-4 space-y-2">
-          <p className="text-sm font-medium">Vælg spørgsmål</p>
-
-          <form method="get" className="grid gap-3 md:grid-cols-[1fr_auto]" action="/dmu/templates">
-            <select name="benchmarkCategory" defaultValue={selectedCategoryFilter} className="h-10 rounded-md border px-3 text-sm">
-              <option value="">Alle benchmark-kategorier</option>
-              <option value="NO_BENCHMARK">Ingen benchmark</option>
-              {benchmarkCategoryOptions.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <button type="submit" className="h-10 rounded-md border px-3 text-sm font-medium hover:bg-muted">
-                Filtrer
-              </button>
-              {selectedCategoryFilter ? (
-                <a href="/dmu/templates" className="flex h-10 items-center justify-center rounded-md border px-3 text-sm font-medium hover:bg-muted">
-                  Nulstil
-                </a>
-              ) : null}
-            </div>
-          </form>
-
-          <div className="max-h-56 space-y-2 overflow-auto rounded-md border p-3">
-            {questions.map((question) => (
-              <label key={question.id} className="grid grid-cols-[20px_1fr] items-start gap-2 rounded-md p-1.5 text-sm hover:bg-muted/30">
-                <input type="checkbox" name="questionIds" value={question.id} form="create-template-form" className="mt-0.5 h-4 w-4" />
-                <span className="leading-5">
-                  <span className="font-medium">{question.title}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    ({question.questionType === "SCALE_1_5" ? "Skala 1-5" : question.questionType === "SINGLE_CHOICE" ? "Valgmuligheder" : "Tekst"}
-                    {question.benchmarkKey ? ` · ${question.benchmarkKey}` : ""})
-                  </span>
-                </span>
-              </label>
-            ))}
-            {questions.length === 0 ? <p className="text-sm text-muted-foreground">Ingen aktive standardspørgsmål.</p> : null}
-          </div>
-
-          <DetachedSubmitButton form="create-template-form" pendingText="Opretter skabelon..." className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-            Opret skabelon
-          </DetachedSubmitButton>
-        </div>
+        <CreateTemplateForm action={createTemplateAction} requestId={randomUUID()} questions={questions} initialCategory={selectedCategoryFilter} />
       </section>
 
       <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
