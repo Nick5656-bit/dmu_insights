@@ -82,9 +82,9 @@ export async function sendSurveyInvitation({
 
           <!-- Header -->
           <tr>
-            <td style="background:linear-gradient(145deg,#10244D,#243f7e);border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
-              <p style="margin:0;color:#ffffff;font-size:13px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;opacity:0.75;">Danmarks Motor Union</p>
-              <h1 style="margin:8px 0 0;color:#ffffff;font-size:24px;font-weight:700;">Vi vil gerne høre din mening</h1>
+            <td bgcolor="#ffffff" style="background-color:#ffffff;border:1px solid #e4e4e7;border-bottom:0;border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
+              <p style="margin:0;color:#10244D;font-size:13px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;">Danmarks Motor Union</p>
+              <h1 style="margin:8px 0 0;color:#10244D;font-size:24px;font-weight:700;">Vi vil gerne høre din mening</h1>
             </td>
           </tr>
 
