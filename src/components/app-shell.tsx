@@ -45,19 +45,19 @@ export function AppShell({ areaLabel, userName, navItems, children }: AppShellPr
         </aside>
 
         <div className="min-w-0 flex-1">
-          <header className="sticky top-3 z-30 rounded-[1.8rem] border border-border/75 bg-background/88 px-4 py-2.5 shadow-[0_24px_50px_-38px_rgba(21,37,77,0.42)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+          <header className="border-b border-border/80 px-1 pb-4 pt-1 sm:px-2">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{areaLabel}</p>
-                <h1 className="mt-1 text-base font-bold leading-none text-foreground">DMU Medlemsfeedback</h1>
+                <p className="text-base font-bold leading-tight text-primary">DMU Insights</p>
+                <p className="mt-1 text-xs text-muted-foreground">{areaLabel}</p>
               </div>
 
-              <div className="flex items-center gap-2.5">
-                <span className="hidden rounded-full border border-border/80 bg-muted/55 px-4 py-1.5 text-sm text-muted-foreground sm:inline-flex">
+              <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                <span className="hidden max-w-48 truncate text-sm font-medium text-muted-foreground sm:block" title={userName}>
                   {userName}
                 </span>
                 <form action="/api/auth/logout" method="post">
-                  <Button variant="outline" size="default" type="submit">
+                  <Button variant="outline" size="default" className="rounded-xl" type="submit">
                     Log ud
                   </Button>
                 </form>
