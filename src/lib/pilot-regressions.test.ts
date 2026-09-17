@@ -38,9 +38,10 @@ for (const role of ["club", "dmu"]) test(`${role} dashboard and real result load
   for (const control of filterSelects) {
     assert.ok(filterLabels.some(label => label.props.htmlFor === control.props.id));
   }
-  for (const name of ["respondentAgeGroup", "motocrossClass", "respondentRole", role === "dmu" ? "surveyTemplateId" : "surveyInstanceId"]) {
+  for (const name of ["respondentAgeGroup", "motocrossClass", "respondentRole", ...(role === "dmu" ? ["surveyTemplateId"] : [])]) {
     assert.ok(filterSelects.some(control => control.props.name === name));
   }
+  assert.ok(findElements(filterForm, Widget).some(control => control.props.inputName === "surveyInstanceId"));
   assert.ok(findElements(filterForm, "button").some(node => node.props.type === "submit" && node.props.children === "Anvend filtre"));
   if (role === "dmu") {
     const year = findElements(tree, "select").find((element) => element.props.name === "year");

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { parseSelectionIds, parseDashboardYear } from "@/lib/dashboard-filters";
+import { overviewQuestions } from "@/lib/result-overview";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
 import { ResultOverviewChart } from "@/components/charts/result-overview-chart";
 import { loadResultOverview } from "@/lib/result-overview.server";
@@ -26,6 +28,7 @@ type DmuDashboardProps = {
     motocrossClass?: string;
     respondentRole?: string;
     surveyTemplateId?: string;
+    surveyInstanceId?: string | string[];
     clubIds?: string | string[];
     textQuestionId?: string;
     year?: string;
@@ -33,27 +36,18 @@ type DmuDashboardProps = {
   }>;
 };
 
-function parseClubIds(rawValue: string | string[] | undefined): string[] {
-  if (!rawValue) {
-    return [];
-  }
-
-  const values = Array.isArray(rawValue) ? rawValue : [rawValue];
-  return [...new Set(values.flatMap((value) => value.split(",")).map((value) => value.trim()).filter(Boolean))];
-}
-
 export default async function DmuDashboardPage({ searchParams }: DmuDashboardProps) {
   await requireRole("DMU_ADMIN");
   const params = await searchParams;
   const isTest = params.dataMode === "test";
   const dataScope = { club: { isTest } };
   const currentYear = new Date().getUTCFullYear();
-  const selectedYear = params.year === "all" ? null : /^\d{4}$/.test(params.year ?? "") ? Number(params.year) : currentYear;
+  const selectedYear = parseDashboardYear(params.year);
   const yearWhere = selectedYear ? surveyYearWhere(selectedYear) : {};
 
   const clubs = await prisma.club.findMany({ where: { active: true, isTest }, orderBy: { name: "asc" } });
 
-  const selectedClubIds = parseClubIds(params.clubIds);
+  const selectedClubIds = parseSelectionIds(params.clubIds);
   const selectedClubs = clubs.filter((club) => selectedClubIds.includes(club.id));
 
   const availableTemplates = await prisma.surveyTemplate.findMany({
@@ -79,18 +73,20 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
   });
 
   const selectedTemplate = availableTemplates.find((template) => template.id === params.surveyTemplateId);
-  const selectedTemplateInstanceIds = selectedTemplate
-    ? (
-        await prisma.surveyInstance.findMany({
-          where: {
-            surveyTemplateId: selectedTemplate.id,
-            ...dataScope,
-            ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
-          },
-          select: { id: true },
-        })
-      ).map((instance) => instance.id)
-    : [];
+  const baseInstanceWhere = {
+    ...dataScope, ...yearWhere,
+    ...(params.surveyTemplateId ? { surveyTemplateId: params.surveyTemplateId } : {}),
+    ...(selectedClubIds.length ? { clubId: { in: selectedClubIds } } : {}),
+  };
+  const availableSurveys = await prisma.surveyInstance.findMany({
+    where: baseInstanceWhere,
+    select: { id: true, name: true, club: { select: { name: true } } },
+    orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
+  });
+  const selectedSurveyIds = parseSelectionIds(params.surveyInstanceId);
+  if (selectedSurveyIds.some(id => !availableSurveys.some(survey => survey.id === id))) {
+    return <p role="alert">Et valgt arrangement findes ikke i dette udsnit. <Link href={`/dmu/dashboard?dataMode=${isTest ? "test" : "pilot"}`}>Nulstil filtrene</Link>.</p>;
+  }
 
   const respondentAgeGroupFilter = dashboardRespondentAgeGroupOptions.some((option) => option.value === params.respondentAgeGroup)
     ? (params.respondentAgeGroup as RespondentAgeGroup)
@@ -104,6 +100,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
 
   const activeFilters = [
     isTest ? "Testdata" : "Pilotdata",
+    ...(selectedSurveyIds.length ? [`Arrangementer: ${selectedSurveyIds.length}`] : []),
     ...(selectedTemplate ? [`Skabelon: ${selectedTemplate.name}`] : []),
     ...(selectedClubs.length > 0 ? [`Klubber: ${selectedClubs.length}`] : []),
     ...(respondentAgeGroupFilter
@@ -121,21 +118,17 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
   exportParams.set("dataMode", isTest ? "test" : "pilot");
   exportParams.set("year", selectedYear ? String(selectedYear) : "all");
   if (selectedClubIds.length > 0) exportParams.set("clubIds", selectedClubIds.join(","));
-  if (selectedTemplate) exportParams.set("surveyTemplateId", selectedTemplate.id);
+  if (params.surveyTemplateId) exportParams.set("surveyTemplateId", params.surveyTemplateId);
+  for (const id of selectedSurveyIds) exportParams.append("surveyInstanceId", id);
   if (respondentAgeGroupFilter) exportParams.set("respondentAgeGroup", respondentAgeGroupFilter);
   if (motocrossClassFilter) exportParams.set("motocrossClass", motocrossClassFilter);
   if (respondentRoleFilter) exportParams.set("respondentRole", respondentRoleFilter);
   const exportHref = `/api/exports/results${exportParams.size > 0 ? `?${exportParams.toString()}` : ""}`;
 
-  const instanceWhere = {
-    ...dataScope,
-    ...yearWhere,
-    ...(selectedTemplate ? { surveyTemplateId: selectedTemplate.id } : {}),
-    ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
-  };
+  const instanceWhere = { ...baseInstanceWhere, ...(selectedSurveyIds.length ? { id: { in: selectedSurveyIds } } : {}) };
   const responseWhere = {
     surveyInstance: instanceWhere,
-    ...(selectedTemplate ? { surveyInstanceId: { in: selectedTemplateInstanceIds } } : {}),
+    ...(selectedSurveyIds.length ? { surveyInstanceId: { in: selectedSurveyIds } } : {}),
     ...(selectedClubIds.length > 0 ? { clubId: { in: selectedClubIds } } : {}),
     ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
     ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
@@ -145,9 +138,13 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
   const [totalResponses, results, overviewSeries] = await Promise.all([
     prisma.surveyResponse.count({ where: responseWhere }),
     loadSurveyResults(responseWhere, instanceWhere),
-    loadResultOverview(responseWhere, instanceWhere),
+    selectedSurveyIds.length > 1 ? loadResultOverview(responseWhere, instanceWhere) : Promise.resolve([]),
   ]);
 
+  const chartSeries = selectedSurveyIds.length > 1 ? overviewSeries : [{
+    id: "aggregate", label: selectedSurveyIds.length ? availableSurveys.find(s => s.id === selectedSurveyIds[0])!.name : "Samlede resultater",
+    questions: overviewQuestions(results),
+  }];
   const clubsInScope = selectedClubs.length > 0 ? selectedClubs : clubs;
   const summaryCards = [
     { label: "Besvarelser", value: totalResponses, hint: "I valgt udsnit" },
@@ -191,7 +188,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
           {(["pilot", "test"] as const).map((mode) => <Link key={mode} href={`/dmu/dashboard?dataMode=${mode}`} aria-current={(isTest ? "test" : "pilot") === mode ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${(isTest ? "test" : "pilot") === mode ? "bg-white text-primary shadow-sm" : "text-white/75 hover:bg-white/10 hover:text-white"}`}>{mode === "pilot" ? "Pilotdata" : "Testdata"}</Link>)}
         </nav>
         <form key={exportParams.toString()} className="mt-3" method="get" aria-label="Filtrér resultater">
-          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <input type="hidden" name="dataMode" value={isTest ? "test" : "pilot"} />
           <div className="min-w-0 space-y-2">
             <label htmlFor="dashboard-clubs" className="block text-xs font-medium text-white/80">Klubber</label>
@@ -202,6 +199,10 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
             <select id="dashboard-template" name="surveyTemplateId" defaultValue={selectedTemplate?.id ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
               <option value="">Alle skabeloner</option>{availableTemplates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
             </select>
+          </div>
+          <div className="min-w-0 space-y-2">
+            <label htmlFor="dashboard-survey" className="block text-xs font-medium text-white/80">Arrangementer / udsendelser</label>
+            <ClubMultiSelectFilter id="dashboard-survey" clubs={availableSurveys.map(s => ({ id: s.id, name: `${s.name} · ${s.club.name}` }))} initialSelectedIds={selectedSurveyIds} inputName="surveyInstanceId" labels={{ all: "Alle arrangementer", selected: "arrangementer valgt", search: "Søg arrangement", empty: "Ingen arrangementer matcher." }} />
           </div>
           <div className="min-w-0 space-y-2">
             <label htmlFor="dashboard-year" className="block text-xs font-medium text-white/80">År</label>
@@ -256,7 +257,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         ))}
       </section>
 
-      <ResultOverviewChart key={exportParams.toString()} series={overviewSeries} />
+      <ResultOverviewChart key={exportParams.toString()} series={chartSeries} comparison={selectedSurveyIds.length > 1} />
 
       <SurveyResultsPanel results={results} textQuestionId={params.textQuestionId} />
     </div>

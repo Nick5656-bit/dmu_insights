@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { parseSelectionIds } from "@/lib/dashboard-filters";
+import { overviewQuestions } from "@/lib/result-overview";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
 import { ResultOverviewChart } from "@/components/charts/result-overview-chart";
 import { loadResultOverview } from "@/lib/result-overview.server";
+import { ClubMultiSelectFilter } from "@/components/club-multi-select-filter";
 import { SurveyResultsPanel } from "@/components/survey-results-panel";
 import { loadSurveyResults } from "@/lib/survey-results.server";
 import { SUPPRESSION_THRESHOLD, responseRate } from "@/lib/survey-results";
@@ -23,7 +26,7 @@ type ClubDashboardProps = {
     respondentAgeGroup?: string;
     motocrossClass?: string;
     respondentRole?: string;
-    surveyInstanceId?: string;
+    surveyInstanceId?: string | string[];
     textQuestionId?: string;
   }>;
 };
@@ -57,9 +60,8 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
   });
 
-  const selectedSurvey = availableSurveys.find((s) => s.id === params.surveyInstanceId);
-  const selectedSurveyId = selectedSurvey?.id;
-  if (params.surveyInstanceId && !selectedSurvey) {
+  const selectedSurveyIds = parseSelectionIds(params.surveyInstanceId);
+  if (selectedSurveyIds.some(id => !availableSurveys.some(survey => survey.id === id))) {
     return <p role="alert">Spørgeskemaet findes ikke i din klub. <Link href="/club/dashboard">Nulstil filteret</Link>.</p>;
   }
 
@@ -75,22 +77,26 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
   const ownResponseWhere = {
     clubId: session.clubId,
-    ...(selectedSurveyId ? { surveyInstanceId: selectedSurveyId } : {}),
+    ...(selectedSurveyIds.length ? { surveyInstanceId: { in: selectedSurveyIds } } : {}),
     ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
     ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
     ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
   };
 
-  const ownInstanceWhere = { clubId: session.clubId, ...(selectedSurveyId ? { id: selectedSurveyId } : {}) };
+  const ownInstanceWhere = { clubId: session.clubId, ...(selectedSurveyIds.length ? { id: { in: selectedSurveyIds } } : {}) };
   const [members, surveys, ownResponsesCount, distributionRows, overviewSeries, sentInvitations, allResponsesCount] = await Promise.all([
     prisma.member.count({ where: { clubId: session.clubId, active: true } }),
     prisma.surveyInstance.count({ where: { clubId: session.clubId } }),
     prisma.surveyResponse.count({ where: ownResponseWhere }),
     loadSurveyResults(ownResponseWhere, ownInstanceWhere),
-    loadResultOverview(ownResponseWhere, ownInstanceWhere),
+    selectedSurveyIds.length > 1 ? loadResultOverview(ownResponseWhere, ownInstanceWhere) : Promise.resolve([]),
     prisma.surveyInvitation.count({ where: { surveyInstance: ownInstanceWhere, deliveryStatus: "SENT" } }),
     prisma.surveyResponse.count({ where: { surveyInstance: ownInstanceWhere } }),
   ]);
+  const chartSeries = selectedSurveyIds.length > 1 ? overviewSeries : [{
+    id: "aggregate", label: selectedSurveyIds.length ? availableSurveys.find(s => s.id === selectedSurveyIds[0])!.name : "Samlede resultater",
+    questions: overviewQuestions(distributionRows),
+  }];
   const canShowOwnSegment = ownResponsesCount >= SUPPRESSION_THRESHOLD;
   // Segment data is supplied only when answering, so a segment-specific invitation denominator is unknown.
   const responseCoverage = responseRate(allResponsesCount, sentInvitations);
@@ -103,7 +109,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
   ];
 
   const exportParams = new URLSearchParams();
-  if (selectedSurveyId) exportParams.set("surveyInstanceId", selectedSurveyId);
+  for (const id of selectedSurveyIds) exportParams.append("surveyInstanceId", id);
   if (respondentAgeGroupFilter) exportParams.set("respondentAgeGroup", respondentAgeGroupFilter);
   if (motocrossClassFilter) exportParams.set("motocrossClass", motocrossClassFilter);
   if (respondentRoleFilter) exportParams.set("respondentRole", respondentRoleFilter);
@@ -145,10 +151,8 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
         <form key={exportParams.toString()} className="mt-3" method="get" aria-label="Filtrér resultater">
           <div className="grid grid-cols-1 items-end gap-3 sm:max-w-xl">
           <div className="min-w-0 space-y-2">
-            <label htmlFor="dashboard-survey" className="block text-xs font-medium text-white/80">Spørgeskema</label>
-            <select id="dashboard-survey" name="surveyInstanceId" defaultValue={selectedSurveyId ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
-              <option value="">Alle spørgeskemaer</option>{availableSurveys.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <label htmlFor="dashboard-survey" className="block text-xs font-medium text-white/80">Arrangementer / udsendelser</label>
+            <ClubMultiSelectFilter id="dashboard-survey" clubs={availableSurveys} initialSelectedIds={selectedSurveyIds} inputName="surveyInstanceId" labels={{ all: "Alle arrangementer", selected: "arrangementer valgt", search: "Søg arrangement", empty: "Ingen arrangementer matcher." }} />
           </div>
           </div>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-2">
@@ -203,7 +207,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
         </section>
       ) : null}
 
-      <ResultOverviewChart key={exportParams.toString()} series={overviewSeries} />
+      <ResultOverviewChart key={exportParams.toString()} series={chartSeries} comparison={selectedSurveyIds.length > 1} />
 
       <SurveyResultsPanel results={distributionRows} textQuestionId={params.textQuestionId} />
     </div>

@@ -29,7 +29,7 @@ for (const role of ["club", "dmu"] as const) test(`${role} overview independentl
     "@/components/survey-results-panel": { SurveyResultsPanel: () => null },
     "@/components/club-multi-select-filter": { ClubMultiSelectFilter: () => null },
   });
-  const tree = await page.default({ searchParams: Promise.resolve({ dataMode: "test", year: "2026", clubIds: "club-a" }) });
+  const tree = await page.default({ searchParams: Promise.resolve({ dataMode: "test", year: "2026", clubIds: "club-a", surveyInstanceId: "a,b,small" }) });
   const series = findElements(tree, Chart)[0].props.series as OverviewSeries[];
   assert.equal(series.length, 3);
   assert.deepEqual(series[2].questions, []);
@@ -42,4 +42,16 @@ for (const role of ["club", "dmu"] as const) test(`${role} overview independentl
     assert.ok(calls.every(where => where.includes('"isTest":true')));
     assert.ok(calls.every(where => where.includes('"sentAt"')));
   }
+  // Default overview must use the same pooled question totals as the panel,
+  // not silently pick the first event or require a comparison to show a graph.
+  calls.length = 0;
+  const combined = await page.default({ searchParams: Promise.resolve({ dataMode: "test", clubIds: "club-a" }) });
+  const combinedChart = findElements(combined, Chart)[0];
+  const combinedSeries = combinedChart.props.series as OverviewSeries[];
+  assert.equal(combinedChart.props.comparison, false);
+  assert.equal(combinedSeries.length, 1);
+  assert.equal(combinedSeries[0].label, "Samlede resultater");
+  assert.equal(combinedSeries[0].questions[0].count, 14);
+  assert.equal(combinedSeries[0].questions[0].sum, 54);
+  assert.ok(calls.every(where => !where.includes('"sentAt"')));
 });

@@ -97,7 +97,8 @@ test("club result overview and distribution only query its own club", async () =
     "@/components/charts/benchmark-bar-chart": { BenchmarkBarChart: () => null },
   });
   await page.default({ searchParams: Promise.resolve({ surveyInstanceId: "s" }) });
-  assert.equal(resultScopes.length, 2);
+  // Single/aggregate charts reuse the already loaded distribution results.
+  assert.equal(resultScopes.length, 1);
   assert.ok(resultScopes.every(where => where.clubId === "test-club"));
 });
 

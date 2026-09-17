@@ -14,6 +14,7 @@ type ClubMultiSelectFilterProps = {
   initialSelectedIds: string[];
   inputName?: string;
   className?: string;
+  labels?: { all: string; selected: string; search: string; empty: string };
 };
 
 export function ClubMultiSelectFilter({
@@ -22,6 +23,7 @@ export function ClubMultiSelectFilter({
   initialSelectedIds,
   inputName = "clubIds",
   className,
+  labels = { all: "Alle klubber", selected: "klubber valgt", search: "Søg klub", empty: "Ingen klubber matcher." },
 }: ClubMultiSelectFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -73,10 +75,10 @@ export function ClubMultiSelectFilter({
         >
           <span className="truncate text-left">
             {selectedClubs.length === 0
-              ? "Alle klubber"
+              ? labels.all
               : selectedClubs.length === 1
                 ? selectedClubs[0].name
-                : `${selectedClubs.length} klubber valgt`}
+                : `${selectedClubs.length} ${labels.selected}`}
           </span>
           <span className="text-xs text-muted-foreground">Vælg</span>
         </button>
@@ -87,8 +89,8 @@ export function ClubMultiSelectFilter({
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Søg klub..."
-                aria-label="Søg klub"
+                placeholder={`${labels.search}...`}
+                aria-label={labels.search}
                 className="h-10 w-full rounded-xl border border-border/70 px-3 text-sm text-foreground placeholder:text-muted-foreground"
               />
               <button type="button" onClick={clearSelection} className="h-10 rounded-xl border border-border/70 px-3 text-xs font-medium text-foreground hover:bg-muted">
@@ -108,7 +110,7 @@ export function ClubMultiSelectFilter({
                   <span className="min-w-0 truncate">{club.name}</span>
                 </label>
               ))}
-              {filteredClubs.length === 0 ? <p className="px-3 py-3 text-sm text-muted-foreground">Ingen klubber matcher.</p> : null}
+              {filteredClubs.length === 0 ? <p className="px-3 py-3 text-sm text-muted-foreground">{labels.empty}</p> : null}
             </div>
 
             <div className="mt-3 flex justify-end">
