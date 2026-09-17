@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
-import { BenchmarkBarChart } from "@/components/charts/benchmark-bar-chart";
+import { ResultOverviewChart } from "@/components/charts/result-overview-chart";
+import { loadResultOverview } from "@/lib/result-overview.server";
 import { SurveyResultsPanel } from "@/components/survey-results-panel";
 import { loadSurveyResults } from "@/lib/survey-results.server";
-import { SUPPRESSION_THRESHOLD, buildQuestionBenchmarks, responseRate, surveyYearWhere } from "@/lib/survey-results";
+import { SUPPRESSION_THRESHOLD, responseRate } from "@/lib/survey-results";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -81,29 +82,16 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
   };
 
   const ownInstanceWhere = { clubId: session.clubId, ...(selectedSurveyId ? { id: selectedSurveyId } : {}) };
-  const comparisonYear = (selectedSurvey?.sentAt ?? selectedSurvey?.createdAt)?.getUTCFullYear();
-  const comparisonInstanceWhere = selectedSurvey && comparisonYear
-    ? { club: { isTest: club.isTest }, clubId: { not: session.clubId }, surveyTemplateId: selectedSurvey.surveyTemplateId, ...surveyYearWhere(comparisonYear) }
-    : null;
-  const [members, surveys, ownResponsesCount, distributionRows, comparisonResults, sentInvitations, allResponsesCount] = await Promise.all([
+  const [members, surveys, ownResponsesCount, distributionRows, overviewSeries, sentInvitations, allResponsesCount] = await Promise.all([
     prisma.member.count({ where: { clubId: session.clubId, active: true } }),
     prisma.surveyInstance.count({ where: { clubId: session.clubId } }),
     prisma.surveyResponse.count({ where: ownResponseWhere }),
     loadSurveyResults(ownResponseWhere, ownInstanceWhere),
-    comparisonInstanceWhere ? loadSurveyResults({
-      surveyInstance: comparisonInstanceWhere,
-      ...(respondentAgeGroupFilter ? { respondentAgeGroup: respondentAgeGroupFilter } : {}),
-      ...(motocrossClassFilter ? { motocrossClass: motocrossClassFilter } : {}),
-      ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
-    }, comparisonInstanceWhere) : Promise.resolve([]),
+    loadResultOverview(ownResponseWhere, ownInstanceWhere),
     prisma.surveyInvitation.count({ where: { surveyInstance: ownInstanceWhere, deliveryStatus: "SENT" } }),
     prisma.surveyResponse.count({ where: { surveyInstance: ownInstanceWhere } }),
   ]);
   const canShowOwnSegment = ownResponsesCount >= SUPPRESSION_THRESHOLD;
-  const benchmarkRows = buildQuestionBenchmarks(distributionRows, comparisonResults);
-  const overallOwn = benchmarkRows.length ? benchmarkRows.reduce((sum, row) => sum + row.own, 0) / benchmarkRows.length : null;
-  const overallBenchmark = benchmarkRows.length ? benchmarkRows.reduce((sum, row) => sum + row.benchmark, 0) / benchmarkRows.length : null;
-  const delta = overallOwn !== null && overallBenchmark !== null ? overallOwn - overallBenchmark : null;
   // Segment data is supplied only when answering, so a segment-specific invitation denominator is unknown.
   const responseCoverage = responseRate(allResponsesCount, sentInvitations);
 
@@ -114,7 +102,6 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
     { label: "Spørgeskemaer", value: surveys, hint: "Alle oprettede" },
   ];
 
-  const canRenderBenchmark = benchmarkRows.length > 0;
   const exportParams = new URLSearchParams();
   if (selectedSurveyId) exportParams.set("surveyInstanceId", selectedSurveyId);
   if (respondentAgeGroupFilter) exportParams.set("respondentAgeGroup", respondentAgeGroupFilter);
@@ -155,14 +142,21 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
         </div>
 
 
-        <form key={exportParams.toString()} className="mt-5 border-t border-white/15 pt-5" method="get" aria-label="Filtrér resultater">
-          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <form key={exportParams.toString()} className="mt-3" method="get" aria-label="Filtrér resultater">
+          <div className="grid grid-cols-1 items-end gap-3 sm:max-w-xl">
           <div className="min-w-0 space-y-2">
             <label htmlFor="dashboard-survey" className="block text-xs font-medium text-white/80">Spørgeskema</label>
             <select id="dashboard-survey" name="surveyInstanceId" defaultValue={selectedSurveyId ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
               <option value="">Alle spørgeskemaer</option>{availableSurveys.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-start justify-between gap-2">
+            <details className="group min-w-0 flex-1 basis-64" open={Boolean(respondentAgeGroupFilter || motocrossClassFilter || respondentRoleFilter)}>
+              <summary className="w-fit cursor-pointer rounded-lg px-2 py-3 text-sm text-white/85 hover:bg-white/10">
+                Flere filtre{[respondentAgeGroupFilter, motocrossClassFilter, respondentRoleFilter].filter(Boolean).length > 0 ? ` (${[respondentAgeGroupFilter, motocrossClassFilter, respondentRoleFilter].filter(Boolean).length})` : ""}
+              </summary>
+              <div className="mt-1 grid grid-cols-1 gap-3 pr-2 sm:grid-cols-3">
           <div className="min-w-0 space-y-2">
             <label htmlFor="dashboard-age" className="block text-xs font-medium text-white/80">Alder</label>
             <select id="dashboard-age" name="respondentAgeGroup" defaultValue={respondentAgeGroupFilter ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
@@ -181,10 +175,13 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
               <option value="">Alle roller</option>{dashboardRespondentRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
-          </div>
-          <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-white/15 pt-4">
+              </div>
+            </details>
+          <div className="flex shrink-0 items-center gap-2">
             <Link href="/club/dashboard" className="inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">Nulstil</Link>
             <button type="submit" className="h-11 rounded-xl bg-white px-5 text-sm font-semibold text-primary shadow-sm transition hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary">Anvend filtre</button>
+          </div>
+
           </div>
         </form>
       </section>
@@ -206,67 +203,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
         </section>
       ) : null}
 
-      {/* ── Benchmark + sidepanel ────────────────────────────────────────── */}
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
-        <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Benchmark</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Jeres gennemsnit pr. spørgsmål mod andre klubber med samme skabelon og udsendelsesår. Begge grupper skal have mindst fem svar pr. spørgsmål.</p>
-            </div>
-            <span className="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-xs font-medium text-muted-foreground">
-              {benchmarkRows.length} spørgsmål
-            </span>
-          </div>
-          <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
-            {canRenderBenchmark ? (
-              <BenchmarkBarChart data={benchmarkRows} />
-            ) : (
-              <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-                {selectedSurvey ? "Der er endnu ikke nok svar til en sammenligning." : "Vælg et spørgeskema for at sammenligne samme skabelon og udsendelsesår."}
-              </div>
-            )}
-          </div>
-        </article>
-
-        <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-          <div className="space-y-3">
-            <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Samlet niveau</p>
-              <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
-                {overallOwn !== null ? overallOwn.toFixed(2) : "–"}
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Benchmark</p>
-                <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
-                  {overallBenchmark !== null ? overallBenchmark.toFixed(2) : "–"}
-                </p>
-              </div>
-              <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Forskel</p>
-                <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-foreground">
-                  {delta !== null ? `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}` : "–"}
-                </p>
-              </div>
-            </div>
-            <div className="rounded-[22px] border border-border/70 bg-background/80 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Egne svar i udsnittet</p>
-                <span className="text-sm font-semibold text-foreground">{ownResponsesCount}</span>
-              </div>
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Svarprocent uden segmentfiltre</p>
-                <span className="text-sm font-semibold text-foreground">{responseCoverage === null ? "—" : `${responseCoverage}%`}</span>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full bg-primary" style={{ width: `${responseCoverage ?? 0}%` }} />
-              </div>
-            </div>
-          </div>
-        </article>
-      </section>
+      <ResultOverviewChart key={exportParams.toString()} series={overviewSeries} />
 
       <SurveyResultsPanel results={distributionRows} textQuestionId={params.textQuestionId} />
     </div>

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
-import { ClubComparisonChart } from "@/components/charts/benchmark-bar-chart";
+import { ResultOverviewChart } from "@/components/charts/result-overview-chart";
+import { loadResultOverview } from "@/lib/result-overview.server";
 import { SurveyResultsPanel } from "@/components/survey-results-panel";
 import { loadSurveyResults } from "@/lib/survey-results.server";
-import { SUPPRESSION_THRESHOLD, surveyYearWhere } from "@/lib/survey-results";
+import { surveyYearWhere } from "@/lib/survey-results";
 import { ClubMultiSelectFilter } from "@/components/club-multi-select-filter";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -141,38 +142,13 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     ...(respondentRoleFilter ? { respondentRole: respondentRoleFilter } : {}),
   };
 
-  const [totalResponses, results] = await Promise.all([
+  const [totalResponses, results, overviewSeries] = await Promise.all([
     prisma.surveyResponse.count({ where: responseWhere }),
     loadSurveyResults(responseWhere, instanceWhere),
+    loadResultOverview(responseWhere, instanceWhere),
   ]);
 
   const clubsInScope = selectedClubs.length > 0 ? selectedClubs : clubs;
-  const keyQuestion = results.find((result) => result.benchmarkKey === "SATISFACTION_OVERALL" && !result.suppressed)
-    ?? results.find((result) => result.questionType === "SCALE_1_5" && result.benchmarkKey && !result.suppressed);
-  const clubComparisonRows: { label: string; own: number; benchmark: number }[] = [];
-  const shouldShowClubComparison = selectedClubs.length >= 2 && Boolean(selectedTemplate && selectedYear);
-  if (shouldShowClubComparison && keyQuestion && selectedTemplate) {
-    const comparisonInstanceWhere = { ...dataScope, ...yearWhere, surveyTemplateId: selectedTemplate.id };
-    // The national benchmark includes only clubs that independently meet the
-    // minimum for this question. A small club cannot be recovered by subtraction.
-    const clubResults = await Promise.all(clubs.map(async (club) => {
-      const perClubWhere = { ...comparisonInstanceWhere, clubId: club.id };
-      const perClub = await loadSurveyResults({
-        ...responseWhere, clubId: club.id, surveyInstanceId: undefined,
-        surveyInstance: perClubWhere,
-      }, perClubWhere);
-      return { club, result: perClub.find((result) => result.questionId === keyQuestion.questionId) };
-    }));
-    const eligible = clubResults.filter(({ result }) => result && !result.suppressed && result.avg !== null);
-    const count = eligible.reduce((sum, { result }) => sum + result!.count, 0);
-    const benchmark = count ? eligible.reduce((sum, { result }) => sum + result!.avg! * result!.count, 0) / count : null;
-    if (benchmark !== null) {
-      for (const { club, result } of eligible) {
-        if (selectedClubIds.includes(club.id)) clubComparisonRows.push({ label: club.name, own: result!.avg!, benchmark: Number(benchmark.toFixed(2)) });
-      }
-    }
-  }
-
   const summaryCards = [
     { label: "Besvarelser", value: totalResponses, hint: "I valgt udsnit" },
     { label: "Klubber", value: clubsInScope.length, hint: selectedClubs.length > 0 ? "Udvalgte klubber" : "Aktive klubber" },
@@ -211,11 +187,11 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
           </div>
         </div>
 
-        <nav aria-label="Datagrundlag" className="mt-5 inline-flex gap-1 rounded-xl border border-white/15 bg-black/10 p-1">
+        <nav aria-label="Datagrundlag" className="mt-3 inline-flex gap-1 rounded-xl border border-white/15 bg-black/10 p-1">
           {(["pilot", "test"] as const).map((mode) => <Link key={mode} href={`/dmu/dashboard?dataMode=${mode}`} aria-current={(isTest ? "test" : "pilot") === mode ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${(isTest ? "test" : "pilot") === mode ? "bg-white text-primary shadow-sm" : "text-white/75 hover:bg-white/10 hover:text-white"}`}>{mode === "pilot" ? "Pilotdata" : "Testdata"}</Link>)}
         </nav>
-        <form key={exportParams.toString()} className="mt-5 border-t border-white/15 pt-5" method="get" aria-label="Filtrér resultater">
-          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <form key={exportParams.toString()} className="mt-3" method="get" aria-label="Filtrér resultater">
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
           <input type="hidden" name="dataMode" value={isTest ? "test" : "pilot"} />
           <div className="min-w-0 space-y-2">
             <label htmlFor="dashboard-clubs" className="block text-xs font-medium text-white/80">Klubber</label>
@@ -233,6 +209,13 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
               <option value="all">Alle år</option>{[...new Set([currentYear, currentYear - 1, currentYear - 2, currentYear - 3, ...(selectedYear ? [selectedYear] : [])])].sort((a, b) => b - a).map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
           </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-start justify-between gap-2">
+            <details className="group min-w-0 flex-1 basis-64" open={Boolean(respondentAgeGroupFilter || motocrossClassFilter || respondentRoleFilter)}>
+              <summary className="w-fit cursor-pointer rounded-lg px-2 py-3 text-sm text-white/85 hover:bg-white/10">
+                Flere filtre{[respondentAgeGroupFilter, motocrossClassFilter, respondentRoleFilter].filter(Boolean).length > 0 ? ` (${[respondentAgeGroupFilter, motocrossClassFilter, respondentRoleFilter].filter(Boolean).length})` : ""}
+              </summary>
+              <div className="mt-1 grid grid-cols-1 gap-3 pr-2 sm:grid-cols-3">
           <div className="min-w-0 space-y-2">
             <label htmlFor="dashboard-age" className="block text-xs font-medium text-white/80">Alder</label>
             <select id="dashboard-age" name="respondentAgeGroup" defaultValue={respondentAgeGroupFilter ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
@@ -251,10 +234,13 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
               <option value="">Alle roller</option>{dashboardRespondentRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
-          </div>
-          <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-white/15 pt-4">
+              </div>
+            </details>
+          <div className="flex shrink-0 items-center gap-2">
             <Link href={`/dmu/dashboard?dataMode=${isTest ? "test" : "pilot"}`} className="inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">Nulstil</Link>
             <button type="submit" className="h-11 rounded-xl bg-white px-5 text-sm font-semibold text-primary shadow-sm transition hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary">Anvend filtre</button>
+          </div>
+
           </div>
         </form>
       </section>
@@ -270,33 +256,7 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         ))}
       </section>
 
-      {/* ── Klubsammenligning ───────────────────────────────────────────── */}
-      <section>
-        <article className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="font-heading text-2xl font-semibold tracking-tight text-foreground">Klubsammenligning</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{keyQuestion ? `${keyQuestion.questionTitle} · Samme skabelon og udsendelsesår. Benchmark omfatter klubber med mindst fem svar på spørgsmålet.` : "Vælg en skabelon med skalaspørgsmål til sammenligning."}</p>
-            </div>
-            <span className="rounded-full border border-border/70 bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">Skala 1-5</span>
-          </div>
-
-          <div className="mt-5 rounded-[22px] border border-border/60 bg-background/80 p-4">
-            {shouldShowClubComparison && clubComparisonRows.length > 0 ? (
-              <ClubComparisonChart data={clubComparisonRows} />
-            ) : (
-              <div className="rounded-[20px] border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">Ingen resultater endnu</p>
-                <p className="mt-1">
-                  {!shouldShowClubComparison
-                    ? "Vælg mindst to klubber, en skabelon og et år for at sammenligne deres resultater."
-                    : `Sammenligning vises, når hver klub har mindst ${SUPPRESSION_THRESHOLD} svar på det samme spørgsmål.`}
-                </p>
-              </div>
-            )}
-          </div>
-        </article>
-      </section>
+      <ResultOverviewChart key={exportParams.toString()} series={overviewSeries} />
 
       <SurveyResultsPanel results={results} textQuestionId={params.textQuestionId} />
     </div>

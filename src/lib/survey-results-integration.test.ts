@@ -1,37 +1,45 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadTestModule, findElements } from "./test-module-loader";
+import type { OverviewSeries } from "./result-overview";
 
-test("DMU comparison does not leak a one-answer club via the national average", async () => {
+for (const role of ["club", "dmu"] as const) test(`${role} overview independently suppresses small events and scopes every query`, async () => {
   const Chart = () => null;
-  const Panel = () => null;
-  const calls: unknown[] = [];
-  const clubs = [{ id: "a", name: "A" }, { id: "b", name: "B" }, { id: "small", name: "Small" }];
-  const q = { id: "q", title: "Samme spørgsmål", questionType: "SCALE_1_5", benchmarkKey: "SATISFACTION_OVERALL", options: [] };
+  const calls: string[] = [];
+  const instances = ["a", "b", "small"].map(id => ({ id, name: id, createdAt: new Date("2026-09-01"), club: { name: "Club A" } }));
+  const q = { id: "q", title: "Sikkerhed", questionType: "SCALE_1_5", benchmarkKey: "SAFETY_OVERALL", options: [] };
   const prisma = {
-    club: { findMany: async () => clubs },
-    surveyTemplate: { findMany: async () => [{ id: "t", name: "Skabelon", surveyType: "EVENT", _count: { surveyInstances: 3 } }] },
-    surveyInstance: { findMany: async () => [{ id: "s1" }, { id: "s2" }] },
-    surveyResponse: { count: async () => 11 },
+    club: { findMany: async () => [{ id: "club-a", name: "Club A" }], findUnique: async () => ({ isTest: true }) },
+    surveyTemplate: { findMany: async () => [] },
+    surveyInstance: { findMany: async ({ where }: { where: unknown }) => { calls.push(JSON.stringify(where)); return instances; }, count: async () => 3 },
+    member: { count: async () => 20 }, surveyInvitation: { count: async () => 20 },
+    surveyResponse: { count: async () => 14 },
     question: { findMany: async () => [q] },
-    surveyAnswer: { findMany: async (args: { where: { surveyResponse: { clubId?: string | { in: string[] }; surveyInstance: unknown } } }) => {
-      calls.push(args.where.surveyResponse.surveyInstance);
-      const club = args.where.surveyResponse.clubId;
-      const count = club === "small" ? 1 : typeof club === "string" ? 5 : 11;
-      return Array.from({ length: count }, (_, i) => ({ questionId: "q", surveyResponseId: `${club}-${i}`, numericValue: club === "small" ? 1 : 5, optionValue: null, textValue: null }));
+    surveyAnswer: { findMany: async ({ where }: { where: unknown }) => {
+      calls.push(JSON.stringify(where));
+      return instances.flatMap(s => Array.from({ length: s.id === "small" ? 4 : 5 }, (_, i) => ({
+        questionId: "q", surveyResponseId: `private-response-${s.id}-${i}`, numericValue: s.id === "small" ? 1 : 5,
+        optionValue: null, textValue: null, surveyResponse: { surveyInstanceId: s.id },
+      })));
     } },
   };
-  const page = loadTestModule<{ default: (props: { searchParams: Promise<Record<string, string>> }) => Promise<unknown> }>("src/app/dmu/dashboard/page.tsx", {
-    "@/lib/prisma": { prisma }, "@/lib/auth": { requireRole: async () => ({ role: "DMU_ADMIN" }) },
-    "@/components/charts/benchmark-bar-chart": { ClubComparisonChart: Chart },
-    "@/components/survey-results-panel": { SurveyResultsPanel: Panel },
+  const page = loadTestModule<{ default: (props: { searchParams: Promise<Record<string, string>> }) => Promise<unknown> }>(`src/app/${role}/dashboard/page.tsx`, {
+    "@/lib/prisma": { prisma }, "@/lib/auth": { requireRole: async (required: string) => { assert.equal(required, role === "dmu" ? "DMU_ADMIN" : "CLUB_ADMIN"); return { clubId: "club-a" }; } },
+    "@/components/charts/result-overview-chart": { ResultOverviewChart: Chart },
+    "@/components/survey-results-panel": { SurveyResultsPanel: () => null },
     "@/components/club-multi-select-filter": { ClubMultiSelectFilter: () => null },
   });
-  const tree = await page.default({ searchParams: Promise.resolve({ clubIds: "a,b,small", surveyTemplateId: "t", year: "2026" }) });
-  assert.equal(findElements(tree, "select").find(node => node.props.name === "year")?.props.defaultValue, 2026);
-  assert.ok(!findElements(tree, "span").some(node => String(node.props.children).includes("Udsendelsesår:")));
-  const chart = findElements(tree, Chart)[0];
-  assert.deepEqual(chart.props.data, [{ label: "A", own: 5, benchmark: 5 }, { label: "B", own: 5, benchmark: 5 }]);
-  assert.ok(calls.every((where) => JSON.stringify(where).includes('"surveyTemplateId":"t"')));
-  assert.ok(calls.every((where) => JSON.stringify(where).includes('"sentAt"')));
+  const tree = await page.default({ searchParams: Promise.resolve({ dataMode: "test", year: "2026", clubIds: "club-a" }) });
+  const series = findElements(tree, Chart)[0].props.series as OverviewSeries[];
+  assert.equal(series.length, 3);
+  assert.deepEqual(series[2].questions, []);
+  assert.equal(series[0].questions[0].sum, 25);
+  assert.equal(series[0].questions[0].count, 5);
+  assert.ok(!JSON.stringify(series).includes("private-response"));
+  assert.ok(!JSON.stringify(series).includes("numericValue"));
+  assert.ok(calls.every(where => where.includes("club-a")));
+  if (role === "dmu") {
+    assert.ok(calls.every(where => where.includes('"isTest":true')));
+    assert.ok(calls.every(where => where.includes('"sentAt"')));
+  }
 });

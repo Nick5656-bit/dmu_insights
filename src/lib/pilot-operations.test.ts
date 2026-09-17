@@ -53,6 +53,7 @@ for (const isTest of [false, true]) test(`DMU dashboard + exports keep ${isTest 
   const prisma = {
     club: { findMany: async ({ where }: { where: unknown }) => { clubsSeen.push(where); return []; } },
     surveyTemplate: { findMany: async () => [] },
+    surveyInstance: { findMany: async () => [] },
     surveyResponse: { count: async () => 0 },
     question: { findMany: async () => [] },
     surveyAnswer: { findMany: async ({ where }: { where: { surveyResponse: typeof calls[number] } }) => { calls.push(where.surveyResponse); return []; } },
@@ -81,7 +82,7 @@ for (const isTest of [false, true]) test(`DMU dashboard + exports keep ${isTest 
   assert.deepEqual(clubsSeen, [{ active: true, isTest }]);
 });
 
-test("test club benchmarks can never include a real pilot club", async () => {
+test("club result overview and distribution only query its own club", async () => {
   const resultScopes: { club?: { isTest: boolean }; clubId: unknown }[] = [];
   const prisma = {
     club: { findUnique: async () => ({ isTest: true }) },
@@ -91,12 +92,13 @@ test("test club benchmarks can never include a real pilot club", async () => {
   const page = loadTestModule<{ default: (props: { searchParams: Promise<{ surveyInstanceId: string }> }) => Promise<unknown> }>("src/app/club/dashboard/page.tsx", {
     "@/lib/prisma": { prisma }, "@/lib/auth": { requireRole: async () => ({ role: "CLUB_ADMIN", clubId: "test-club" }) },
     "@/lib/survey-results.server": { loadSurveyResults: async (_responses: unknown, instances: typeof resultScopes[number]) => { resultScopes.push(instances); return []; } },
+    "@/lib/result-overview.server": { loadResultOverview: async (_responses: unknown, instances: typeof resultScopes[number]) => { resultScopes.push(instances); return []; } },
     "@/components/survey-results-panel": { SurveyResultsPanel: () => null },
     "@/components/charts/benchmark-bar-chart": { BenchmarkBarChart: () => null },
   });
   await page.default({ searchParams: Promise.resolve({ surveyInstanceId: "s" }) });
-  const comparison = resultScopes.find((where) => typeof where.clubId === "object");
-  assert.deepEqual(comparison?.club, { isTest: true });
+  assert.equal(resultScopes.length, 2);
+  assert.ok(resultScopes.every(where => where.clubId === "test-club"));
 });
 
 test("retention only deletes shared event participants after ALL surveys pass retention, including previously redacted events", async () => {

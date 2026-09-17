@@ -19,6 +19,7 @@ if (process.argv.includes("--dashboard")) {
   dashboardFixture = `
     import Link from "next/link";
     import { ClubMultiSelectFilter } from "./src/components/club-multi-select-filter";
+    import { ResultOverviewChart } from "./src/components/charts/result-overview-chart";
     import { dashboardRespondentAgeGroupOptions, dashboardMotocrossClassOptions, dashboardRespondentRoleOptions } from "./src/lib/survey-segments";
     const params = new URLSearchParams(location.search);
     const isTest = params.get("dataMode") === "test", club = {isTest};
@@ -35,7 +36,8 @@ if (process.argv.includes("--dashboard")) {
     const surveyActionLinks = [{href:"/dmu/surveys",label:"Udsend spørgeskema"},{href:"/dmu/events",label:"Kalender"}];
     const dashboardLinks = [{href:"/club/overview",label:"Overblik"},{href:"/club/events",label:"Arrangementer"}];
     const exportHref = "#", exportParams = params;
-    function DashboardFixture(){return location.pathname.startsWith("/club") ? (${panels[1]}) : (${panels[0]});}
+    const overviewSeries = ["Forårsløb", "Efterårsløb"].map((label,index)=>({id:String(index),label:label+" · Eksempelklub · 17.9.2026",questions:["Overordnet","Bane","Sikkerhed","Faciliteter","Stemning"].map((category,i)=>({id:String(i),title:"Hvor tilfreds var du med "+category.toLowerCase()+"?",category,sum:15+i+index,count:5}))}));
+    function DashboardFixture(){return <>{location.pathname.startsWith("/club") ? (${panels[1]}) : (${panels[0]})}<ResultOverviewChart series={overviewSeries}/></>;}
   `;
 }
 

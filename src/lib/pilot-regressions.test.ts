@@ -12,6 +12,7 @@ const adapters = {
   "@/lib/auth": auth, "next/cache": { revalidatePath() {} },
   "@/components/survey-results-panel": { SurveyResultsPanel: Widget },
   "@/components/charts/benchmark-bar-chart": { BenchmarkBarChart: Widget, ClubComparisonChart: Widget },
+  "@/components/charts/result-overview-chart": { ResultOverviewChart: Widget },
   "@/components/club-multi-select-filter": { ClubMultiSelectFilter: Widget },
 };
 type Page = { default: (props: { searchParams: Promise<Record<string, string>> }) => Promise<unknown> };
