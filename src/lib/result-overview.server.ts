@@ -6,7 +6,7 @@ import { overviewQuestions, type OverviewSeries } from "./result-overview";
 export async function loadResultOverview(responseWhere: Prisma.SurveyResponseWhereInput, instanceWhere: Prisma.SurveyInstanceWhereInput): Promise<OverviewSeries[]> {
   const instances = await prisma.surveyInstance.findMany({
     where: instanceWhere,
-    select: { id: true, name: true, sentAt: true, createdAt: true, club: { select: { name: true } } },
+    select: { id: true, name: true, sentAt: true, createdAt: true, event: { select: { eventDate: true } }, club: { select: { name: true } } },
     orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
   });
   if (!instances.length) return [];
@@ -32,7 +32,8 @@ export async function loadResultOverview(responseWhere: Prisma.SurveyResponseWhe
   }
   return instances.map(instance => ({
     id: instance.id,
-    label: `${instance.name} · ${instance.club.name} · ${(instance.sentAt ?? instance.createdAt).toLocaleDateString("da-DK", { timeZone: "Europe/Copenhagen" })}`,
+    date: (instance.event?.eventDate ?? instance.sentAt ?? instance.createdAt).toISOString(),
+    label: `${instance.name} · ${instance.club.name} · ${(instance.event?.eventDate ?? instance.sentAt ?? instance.createdAt).toLocaleDateString("da-DK", { timeZone: "Europe/Copenhagen" })}`,
     questions: overviewQuestions(questions.map(q => summarizeQuestion({ ...q, options: [] }, grouped.get(instance.id)?.get(q.id) ?? []))),
   }));
 }

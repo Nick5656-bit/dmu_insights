@@ -1,7 +1,7 @@
 import { SUPPRESSION_THRESHOLD, type QuestionResult } from "./survey-results";
 
 export type OverviewQuestion = { id: string; title: string; category: string; sum: number; count: number };
-export type OverviewSeries = { id: string; label: string; questions: OverviewQuestion[] };
+export type OverviewSeries = { id: string; label: string; date?: string; questions: OverviewQuestion[] };
 
 // Only independently eligible question totals cross the server/client boundary.
 export function overviewQuestions(results: QuestionResult[]): OverviewQuestion[] {
@@ -31,4 +31,19 @@ export function buildResultOverview(series: OverviewSeries[]) {
     return row;
   });
   return { rows, means, questions: shared };
+}
+
+// Reuse the bar chart's common eligible questions and exact weighted totals.
+// Never parse dates from display labels or silently drop an undated event.
+export function buildResultTimeline(series: OverviewSeries[], category: string | null = null) {
+  if (series.length < 2 || series.some(s => !s.date || !Number.isFinite(Date.parse(s.date)))) return [];
+  const overview = buildResultOverview(series);
+  if (!overview.rows.length) return [];
+  const categoryRow = category === null ? null : overview.rows.find(row => row.category === category);
+  if (category !== null && !categoryRow) return [];
+  return series.map((s, index) => ({
+    id: s.id, label: s.label, timestamp: Date.parse(s.date!),
+    dateLabel: new Date(s.date!).toLocaleDateString("da-DK", { timeZone: "Europe/Copenhagen" }),
+    value: categoryRow ? Number(categoryRow[`series${index}`]) : overview.means[index].value!,
+  })).sort((a, b) => a.timestamp - b.timestamp || a.id.localeCompare(b.id));
 }
