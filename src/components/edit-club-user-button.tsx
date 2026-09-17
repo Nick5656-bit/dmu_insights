@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SubmitButton } from "@/components/submit-button";
+import { PasswordInput } from "@/components/password-input";
 
 export function EditClubUserButton({
   action,
@@ -63,9 +64,8 @@ export function EditClubUserButton({
           <label className="text-xs font-medium text-muted-foreground" htmlFor={`edit-password-${userId}`}>
             Ny adgangskode (valgfri)
           </label>
-          <input
+          <PasswordInput
             id={`edit-password-${userId}`}
-            type="password"
             name="password"
             minLength={12}
             maxLength={72}

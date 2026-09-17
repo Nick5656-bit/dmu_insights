@@ -30,11 +30,23 @@ for (const role of ["club", "dmu"]) test(`${role} dashboard and real result load
   };
   const page = loadTestModule<Page>(`src/app/${role}/dashboard/page.tsx`, { ...adapters, "@/lib/prisma": { prisma } });
   const tree = await page.default({ searchParams: Promise.resolve({}) });
+  const filterForm = findElements(tree, "form").find(node => node.props["aria-label"] === "Filtrér resultater");
+  assert.equal(filterForm?.props.method, "get");
+  const filterSelects = findElements(filterForm, "select");
+  const filterLabels = findElements(filterForm, "label");
+  for (const control of filterSelects) {
+    assert.ok(filterLabels.some(label => label.props.htmlFor === control.props.id));
+  }
+  for (const name of ["respondentAgeGroup", "motocrossClass", "respondentRole", role === "dmu" ? "surveyTemplateId" : "surveyInstanceId"]) {
+    assert.ok(filterSelects.some(control => control.props.name === name));
+  }
+  assert.ok(findElements(filterForm, "button").some(node => node.props.type === "submit" && node.props.children === "Anvend filtre"));
   if (role === "dmu") {
     const year = findElements(tree, "select").find((element) => element.props.name === "year");
     assert.equal(year?.props.id, "dashboard-year");
     const label = findElements(tree, "label").find((element) => element.props.htmlFor === "dashboard-year");
-    assert.equal(label?.props.className, "sr-only");
+    assert.equal(label?.props.children, "År");
+    assert.ok(!String(label?.props.className).includes("sr-only"));
     assert.ok(String(year?.props.className).includes("h-11"));
   }
   const panels = findElements(tree, Widget).filter((element) => "results" in element.props);

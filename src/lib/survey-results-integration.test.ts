@@ -28,6 +28,8 @@ test("DMU comparison does not leak a one-answer club via the national average", 
     "@/components/club-multi-select-filter": { ClubMultiSelectFilter: () => null },
   });
   const tree = await page.default({ searchParams: Promise.resolve({ clubIds: "a,b,small", surveyTemplateId: "t", year: "2026" }) });
+  assert.equal(findElements(tree, "select").find(node => node.props.name === "year")?.props.defaultValue, 2026);
+  assert.ok(!findElements(tree, "span").some(node => String(node.props.children).includes("Udsendelsesår:")));
   const chart = findElements(tree, Chart)[0];
   assert.deepEqual(chart.props.data, [{ label: "A", own: 5, benchmark: 5 }, { label: "B", own: 5, benchmark: 5 }]);
   assert.ok(calls.every((where) => JSON.stringify(where).includes('"surveyTemplateId":"t"')));

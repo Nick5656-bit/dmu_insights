@@ -9,6 +9,7 @@ type ClubOption = {
 };
 
 type ClubMultiSelectFilterProps = {
+  id?: string;
   clubs: ClubOption[];
   initialSelectedIds: string[];
   inputName?: string;
@@ -16,6 +17,7 @@ type ClubMultiSelectFilterProps = {
 };
 
 export function ClubMultiSelectFilter({
+  id,
   clubs,
   initialSelectedIds,
   inputName = "clubIds",
@@ -56,16 +58,17 @@ export function ClubMultiSelectFilter({
   }
 
   return (
-    <div className={cn("min-w-0", isOpen && "relative z-50", className)}>
+    <div className={cn("min-w-0", isOpen && "relative z-50", className)} onKeyDown={(event) => { if (event.key === "Escape") setIsOpen(false); }}>
       {selectedIds.map((id) => (
         <input key={id} type="hidden" name={inputName} value={id} />
       ))}
 
       <div className="relative">
         <button
+          id={id}
           type="button"
           onClick={() => setIsOpen((prev) => !prev)}
-          className="flex h-11 w-full items-center justify-between rounded-2xl border border-border/70 bg-background/95 px-3 text-sm text-foreground"
+          className="flex h-11 w-full items-center justify-between gap-2 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-expanded={isOpen}
         >
           <span className="truncate text-left">
@@ -79,12 +82,13 @@ export function ClubMultiSelectFilter({
         </button>
 
         {isOpen ? (
-          <div className="absolute left-0 top-full z-[60] mt-2 w-[24rem] max-w-[calc(100vw-2rem)] rounded-[1.25rem] border border-border/80 bg-background p-3 text-foreground shadow-[0_24px_50px_-30px_rgba(15,23,42,0.45)]">
+          <div className="absolute left-0 top-full z-[60] mt-2 w-full sm:w-[22rem] max-w-[calc(100vw-4rem)] rounded-[1.25rem] border border-border/80 bg-background p-3 text-foreground shadow-[0_24px_50px_-30px_rgba(15,23,42,0.45)]">
             <div className="flex items-center gap-2">
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Søg klub..."
+                aria-label="Søg klub"
                 className="h-10 w-full rounded-xl border border-border/70 px-3 text-sm text-foreground placeholder:text-muted-foreground"
               />
               <button type="button" onClick={clearSelection} className="h-10 rounded-xl border border-border/70 px-3 text-xs font-medium text-foreground hover:bg-muted">
@@ -116,20 +120,6 @@ export function ClubMultiSelectFilter({
         ) : null}
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {selectedClubs.map((club) => (
-          <button
-            key={club.id}
-            type="button"
-            onClick={() => toggleClub(club.id)}
-            className="inline-flex items-center gap-1 rounded-full border bg-muted/20 px-2 py-1 text-xs text-foreground"
-            title="Fjern klub"
-          >
-            <span className="truncate max-w-[10rem]">{club.name}</span>
-            <span className="text-muted-foreground">x</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

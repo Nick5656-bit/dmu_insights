@@ -6,11 +6,45 @@ import path from "node:path";
 import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
 
+// --dashboard renders the actual filter JSX with synthetic options only.
+let dashboardFixture = "";
+if (process.argv.includes("--dashboard")) {
+  const panels = await Promise.all(["dmu", "club"].map(async area => {
+    const source = await readFile(`src/app/${area}/dashboard/page.tsx`, "utf8");
+    const start = source.indexOf('<section className="overflow-visible');
+    const end = source.indexOf("</section>", start) + "</section>".length;
+    if (start < 0 || end < start) throw new Error("Filter panel missing");
+    return source.slice(start, end);
+  }));
+  dashboardFixture = `
+    import Link from "next/link";
+    import { ClubMultiSelectFilter } from "./src/components/club-multi-select-filter";
+    import { dashboardRespondentAgeGroupOptions, dashboardMotocrossClassOptions, dashboardRespondentRoleOptions } from "./src/lib/survey-segments";
+    const params = new URLSearchParams(location.search);
+    const isTest = params.get("dataMode") === "test", club = {isTest};
+    const currentYear = 2026, selectedYear = params.get("year") === "all" ? null : Number(params.get("year") || 2026);
+    const clubs = [{id:"a",name:"Eksempelklub A"},{id:"b",name:"Eksempelklub B med et længere klubnavn"}];
+    const selectedClubIds = params.getAll("clubIds");
+    const availableTemplates = [{id:"t",name:"Evaluering af løbsdagen",surveyType:"EVENT",_count:{surveyInstances:1}}];
+    const selectedTemplate = availableTemplates.find(t=>t.id===params.get("surveyTemplateId"));
+    const availableSurveys = [{id:"s",name:"Efterårets motocrossløb",_count:{responses:0}}];
+    const selectedSurveyId = params.get("surveyInstanceId") || "";
+    const respondentAgeGroupFilter = params.get("respondentAgeGroup") || "";
+    const motocrossClassFilter = params.get("motocrossClass") || "";
+    const respondentRoleFilter = params.get("respondentRole") || "";
+    const surveyActionLinks = [{href:"/dmu/surveys",label:"Udsend spørgeskema"},{href:"/dmu/events",label:"Kalender"}];
+    const dashboardLinks = [{href:"/club/overview",label:"Overblik"},{href:"/club/events",label:"Arrangementer"}];
+    const exportHref = "#", exportParams = params;
+    function DashboardFixture(){return location.pathname.startsWith("/club") ? (${panels[1]}) : (${panels[0]});}
+  `;
+}
+
 const bundle = await build({
   stdin: { resolveDir: process.cwd(), loader: "tsx", contents: `
     import React from "react";
     import { createRoot } from "react-dom/client";
     import { AppShell } from "./src/components/app-shell";
+    ${dashboardFixture}
     const mobile = new URLSearchParams(location.search).has("mobile");
     createRoot(document.getElementById("root")).render(<div style={mobile ? {width:375,maxWidth:"100%",margin:"auto"} : {}}>
       <AppShell areaLabel="DMU administrator" userName="Test Administrator" navItems={[
@@ -20,7 +54,7 @@ const bundle = await build({
         {href:"/dmu/events",label:"Kalender",icon:"events"},
         {href:"/dmu/settings",label:"Indstillinger",icon:"users"}
       ]}>
-        <section className="rounded-[2rem] bg-primary p-6 text-primary-foreground"><p>ANALYSE</p><h1 className="mt-2 text-3xl font-bold">National analyse</h1><p className="mt-4">Isoleret designvisning – ingen produktionsdata.</p></section>
+        ${dashboardFixture ? "<DashboardFixture />" : '<section className="rounded-[2rem] bg-primary p-6 text-primary-foreground"><p>ANALYSE</p><h1 className="mt-2 text-3xl font-bold">National analyse</h1><p className="mt-4">Isoleret designvisning – ingen produktionsdata.</p></section>'}
         {Array.from({length:6},(_,i)=><section key={i} className="rounded-[2rem] border bg-card p-6"><h2 className="text-2xl font-semibold">{i===0?"Klubsammenligning":"Spørgsmålsfordeling"}</h2><div className="mt-6 rounded-2xl bg-muted p-12 text-center text-muted-foreground">Ingen resultater endnu</div></section>)}
       </AppShell>
     </div>);

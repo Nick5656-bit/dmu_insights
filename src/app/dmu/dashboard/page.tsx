@@ -103,7 +103,6 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
 
   const activeFilters = [
     isTest ? "Testdata" : "Pilotdata",
-    ...(selectedYear ? [`Udsendelsesår: ${selectedYear}`] : []),
     ...(selectedTemplate ? [`Skabelon: ${selectedTemplate.name}`] : []),
     ...(selectedClubs.length > 0 ? [`Klubber: ${selectedClubs.length}`] : []),
     ...(respondentAgeGroupFilter
@@ -178,21 +177,17 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
     { label: "Besvarelser", value: totalResponses, hint: "I valgt udsnit" },
     { label: "Klubber", value: clubsInScope.length, hint: selectedClubs.length > 0 ? "Udvalgte klubber" : "Aktive klubber" },
     { label: "Spørgsmål", value: results.length, hint: "Skala, valgmuligheder og tekst" },
-    { label: "Filtre", value: activeFilters.length, hint: activeFilters.length > 0 ? "Aktive" : "Ingen valgt" },
+    { label: "Filtre", value: activeFilters.length + (selectedYear ? 1 : 0), hint: activeFilters.length > 0 || selectedYear ? "Aktive" : "Ingen valgt" },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border bg-muted/20 p-4 text-sm" role="status">{isTest ? "Du ser testdata. De indgår ikke i pilotens resultater." : "Du ser pilotdata. Testklubber er ikke med."} <Link className="ml-2 underline" href={`/dmu/dashboard?dataMode=${isTest ? "pilot" : "test"}`}>{isTest ? "Vis pilotdata" : "Vis testdata"}</Link></div>
       {/* ── Filterpanel ─────────────────────────────────────────────────── */}
-      <section className="overflow-visible rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-6 text-primary-foreground shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
+      <section className="overflow-visible rounded-[28px] border border-primary/20 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.12),_transparent_30%),linear-gradient(145deg,rgba(16,36,77,0.98),rgba(36,67,126,0.94))] p-4 text-primary-foreground sm:p-6 shadow-[0_32px_60px_-42px_rgba(21,37,77,0.65)]">
 
         {/* Topbar: titel + kompakte handlingsknapper */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-white/90">
-              Analyse
-            </span>
             <h1 className="font-heading text-2xl font-semibold tracking-tight text-white">National analyse</h1>
           </div>
 
@@ -216,115 +211,51 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
           </div>
         </div>
 
-        {/* Aktive filter-pills – kun synlige når filtre er valgt */}
-        {activeFilters.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {activeFilters.map((pill) => (
-              <span
-                key={pill}
-                className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-white/85"
-              >
-                {pill}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Filterrækken */}
-        <form className="mt-4 grid gap-2 rounded-[24px] border border-white/12 bg-white/8 p-3 backdrop-blur-sm md:grid-cols-7" method="get">
+        <nav aria-label="Datagrundlag" className="mt-5 inline-flex gap-1 rounded-xl border border-white/15 bg-black/10 p-1">
+          {(["pilot", "test"] as const).map((mode) => <Link key={mode} href={`/dmu/dashboard?dataMode=${mode}`} aria-current={(isTest ? "test" : "pilot") === mode ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${(isTest ? "test" : "pilot") === mode ? "bg-white text-primary shadow-sm" : "text-white/75 hover:bg-white/10 hover:text-white"}`}>{mode === "pilot" ? "Pilotdata" : "Testdata"}</Link>)}
+        </nav>
+        <form key={exportParams.toString()} className="mt-5 border-t border-white/15 pt-5" method="get" aria-label="Filtrér resultater">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <input type="hidden" name="dataMode" value={isTest ? "test" : "pilot"} />
-          <ClubMultiSelectFilter clubs={clubs} initialSelectedIds={selectedClubIds} />
-
-          {/* Skabelon */}
-          <div className="relative md:col-span-1">
-            <select
-              name="surveyTemplateId"
-              defaultValue={selectedTemplate?.id ?? ""}
-              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
-            >
-              <option value="">Alle skabeloner</option>
-              {availableTemplates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name} ({template.surveyType.toLowerCase()} · {template._count.surveyInstances} udsendelser)
-                </option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
+          <div className="min-w-0 space-y-2">
+            <label htmlFor="dashboard-clubs" className="block text-xs font-medium text-white/80">Klubber</label>
+            <ClubMultiSelectFilter key={`${isTest}-${selectedClubIds.join(",")}`} id="dashboard-clubs" clubs={clubs} initialSelectedIds={selectedClubIds} />
           </div>
-
-          <div className="relative md:col-span-1">
-            <label htmlFor="dashboard-year" className="sr-only">Udsendelsesår</label>
-            <select id="dashboard-year" name="year" defaultValue={selectedYear ?? "all"} className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground">
-              <option value="all">Alle år (ingen klubsammenligning)</option>
-              {[...new Set([currentYear, currentYear - 1, currentYear - 2, currentYear - 3, ...(selectedYear ? [selectedYear] : [])])].sort((a, b) => b - a).map((year) => <option key={year} value={year}>{year}</option>)}
+          <div className="min-w-0 space-y-2">
+            <label htmlFor="dashboard-template" className="block text-xs font-medium text-white/80">Skabelon</label>
+            <select id="dashboard-template" name="surveyTemplateId" defaultValue={selectedTemplate?.id ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
+              <option value="">Alle skabeloner</option>{availableTemplates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
             </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
-
-          {/* Alder */}
-          <div className="relative md:col-span-1">
-            <select
-              name="respondentAgeGroup"
-              defaultValue={respondentAgeGroupFilter ?? ""}
-              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
-            >
-              <option value="">Alle aldre</option>
-              {dashboardRespondentAgeGroupOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+          <div className="min-w-0 space-y-2">
+            <label htmlFor="dashboard-year" className="block text-xs font-medium text-white/80">År</label>
+            <select id="dashboard-year" name="year" defaultValue={selectedYear ?? "all"} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
+              <option value="all">Alle år</option>{[...new Set([currentYear, currentYear - 1, currentYear - 2, currentYear - 3, ...(selectedYear ? [selectedYear] : [])])].sort((a, b) => b - a).map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
-
-          {/* Klasse */}
-          <div className="relative md:col-span-1">
-            <select
-              name="motocrossClass"
-              defaultValue={motocrossClassFilter ?? ""}
-              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
-            >
-              <option value="">Alle klasser</option>
-              {dashboardMotocrossClassOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+          <div className="min-w-0 space-y-2">
+            <label htmlFor="dashboard-age" className="block text-xs font-medium text-white/80">Alder</label>
+            <select id="dashboard-age" name="respondentAgeGroup" defaultValue={respondentAgeGroupFilter ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
+              <option value="">Alle aldre</option>{dashboardRespondentAgeGroupOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
-
-          {/* Rolle */}
-          <div className="relative md:col-span-1">
-            <select
-              name="respondentRole"
-              defaultValue={respondentRoleFilter ?? ""}
-              className="h-11 w-full appearance-none rounded-2xl border border-border/70 bg-background/95 pl-3 pr-8 text-sm text-foreground"
-            >
-              <option value="">Alle roller</option>
-              {dashboardRespondentRoleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+          <div className="min-w-0 space-y-2">
+            <label htmlFor="dashboard-class" className="block text-xs font-medium text-white/80">Klasse</label>
+            <select id="dashboard-class" name="motocrossClass" defaultValue={motocrossClassFilter ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
+              <option value="">Alle klasser</option>{dashboardMotocrossClassOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">▾</span>
           </div>
-
-          <button
-            type="submit"
-            className="h-11 rounded-2xl bg-white px-4 text-sm font-semibold text-primary shadow-sm transition hover:-translate-y-0.5 hover:bg-white/92 md:col-span-1"
-          >
-            Opdater
-          </button>
-
-          <Link
-            href="/dmu/dashboard"
-            className="flex h-11 items-center justify-center rounded-2xl border border-white/15 px-4 text-sm font-medium text-white/85 transition hover:bg-white/10 md:col-span-1"
-          >
-            Nulstil
-          </Link>
+          <div className="min-w-0 space-y-2">
+            <label htmlFor="dashboard-role" className="block text-xs font-medium text-white/80">Rolle</label>
+            <select id="dashboard-role" name="respondentRole" defaultValue={respondentRoleFilter ?? ""} className="h-11 w-full min-w-0 rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground">
+              <option value="">Alle roller</option>{dashboardRespondentRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
+          </div>
+          <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-white/15 pt-4">
+            <Link href={`/dmu/dashboard?dataMode=${isTest ? "test" : "pilot"}`} className="inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">Nulstil</Link>
+            <button type="submit" className="h-11 rounded-xl bg-white px-5 text-sm font-semibold text-primary shadow-sm transition hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary">Anvend filtre</button>
+          </div>
         </form>
       </section>
 

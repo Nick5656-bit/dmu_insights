@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { DeleteClubUserButton } from "@/components/delete-club-user-button";
 import { EditClubUserButton } from "@/components/edit-club-user-button";
 import { SubmitButton } from "@/components/submit-button";
+import { PasswordInput } from "@/components/password-input";
 
 export default async function DmuClubUsersPage({
   searchParams,
@@ -238,10 +239,9 @@ export default async function DmuClubUsersPage({
             <label htmlFor="password" className="text-sm font-medium">
               Midlertidig adgangskode
             </label>
-            <input
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               required
               minLength={12}
               maxLength={72}

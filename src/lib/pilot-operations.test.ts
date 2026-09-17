@@ -46,6 +46,7 @@ test("provisioning enforces DMU role, creates club/user atomically and never ove
 });
 
 for (const isTest of [false, true]) test(`DMU dashboard + exports keep ${isTest ? "test" : "pilot"} data separate in every result query`, async () => {
+  const LinkWidget = () => null;
   const calls: { surveyInstance: { club?: { isTest: boolean } } }[] = [];
   const clubsSeen: unknown[] = [];
   const Panel = () => null;
@@ -57,6 +58,7 @@ for (const isTest of [false, true]) test(`DMU dashboard + exports keep ${isTest 
     surveyAnswer: { findMany: async ({ where }: { where: { surveyResponse: typeof calls[number] } }) => { calls.push(where.surveyResponse); return []; } },
   };
   const overrides = {
+    "next/link": LinkWidget,
     "@/lib/prisma": { prisma }, "@/lib/auth": { requireRole: async () => ({ role: "DMU_ADMIN" }), getSession: async () => ({ role: "DMU_ADMIN" }) },
     "@/components/survey-results-panel": { SurveyResultsPanel: Panel },
     "@/components/charts/benchmark-bar-chart": { ClubComparisonChart: () => null },
@@ -65,6 +67,12 @@ for (const isTest of [false, true]) test(`DMU dashboard + exports keep ${isTest 
   const dataMode = isTest ? "test" : "pilot";
   const page = loadTestModule<{ default: (props: { searchParams: Promise<{ dataMode: string }> }) => Promise<unknown> }>("src/app/dmu/dashboard/page.tsx", overrides);
   const tree = await page.default({ searchParams: Promise.resolve({ dataMode }) });
+  const reset = findElements(tree, LinkWidget).find(node => node.props.children === "Nulstil");
+  assert.equal(reset?.props.href, `/dmu/dashboard?dataMode=${dataMode}`);
+  const dataInput = findElements(tree, "input").find(node => node.props.name === "dataMode");
+  assert.equal(dataInput?.props.value, dataMode);
+  const activeMode = findElements(tree, LinkWidget).find(node => node.props["aria-current"] === "page");
+  assert.equal(activeMode?.props.children, isTest ? "Testdata" : "Pilotdata");
   assert.equal(findElements(tree, Panel).length, 1);
   const route = loadTestModule<{ GET: (request: Request) => Promise<Response> }>("src/app/api/exports/results/route.ts", overrides);
   assert.equal((await route.GET(new Request(`https://example.test/api/exports/results?dataMode=${dataMode}`))).status, 200);

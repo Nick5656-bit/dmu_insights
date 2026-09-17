@@ -208,9 +208,6 @@ export function SurveyWizard({ steps, submitAction }: Props) {
           {/* ── Intro ─────────────────────────────── */}
           {current.kind === "INTRO" && (
             <div className="text-center">
-              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-3xl mb-6">
-                📋
-              </div>
               <h1 className="text-3xl font-bold tracking-tight text-foreground">
                 {current.title}
               </h1>
@@ -427,7 +424,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
               disabled={isPending}
               className="flex-1 rounded-2xl bg-primary px-5 py-3.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
             >
-              {isPending ? <span className="inline-flex items-center gap-2"><LoadingSpinner />Sender...</span> : "Indsend svar ✓"}
+              {isPending ? <span className="inline-flex items-center gap-2"><LoadingSpinner />Sender...</span> : "Indsend svar"}
             </button>
           )}
         </div>

@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
+import { PasswordInput } from "@/components/password-input";
 import type { PilotFormState } from "@/lib/pilot-setup";
 import { SubmitButton } from "@/components/submit-button";
 
 export function PilotSetupForm({ club = false, action }: { club?: boolean; action: (state: PilotFormState, form: FormData) => Promise<PilotFormState> }) {
   const [state, formAction, pending] = useActionState(action, { success: false, message: "" });
+  const passwordId = useId();
   return <form action={formAction} className="mt-4 space-y-4">
     {state.message && <p role={state.success ? "status" : "alert"} className={`rounded-xl border p-3 text-sm ${state.success ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}>{state.message}</p>}
     <fieldset disabled={pending} className="grid gap-4 sm:grid-cols-2">
@@ -16,7 +18,7 @@ export function PilotSetupForm({ club = false, action }: { club?: boolean; actio
       </>}
       <label className="text-sm">Administratorens navn<input name="name" autoComplete="off" required minLength={2} maxLength={100} className="mt-1 w-full rounded-lg border p-2" /></label>
       <label className="text-sm">Administratorens e-mail<input name="email" type="email" autoComplete="off" required maxLength={254} className="mt-1 w-full rounded-lg border p-2" /></label>
-      <label className="text-sm sm:col-span-2">Personlig adgangskode<input name="password" type="password" autoComplete="new-password" required minLength={12} maxLength={72} className="mt-1 w-full rounded-lg border p-2" /></label>
+      <div className="space-y-1 text-sm sm:col-span-2"><label htmlFor={passwordId}>Personlig adgangskode</label><PasswordInput id={passwordId} name="password" autoComplete="new-password" required minLength={12} maxLength={72} className="w-full rounded-lg border p-2" /></div>
     </fieldset>
     <p className="text-xs text-muted-foreground">Brug en unik adgangskode på mindst 12 tegn, og del den sikkert med administratoren. Der sendes ikke en velkomstmail.</p>
     <SubmitButton pendingText="Opretter..." className="rounded-xl bg-primary px-4 py-2 font-medium text-primary-foreground">{club ? "Opret klub og administrator" : "Opret personlig DMU-administrator"}</SubmitButton>
