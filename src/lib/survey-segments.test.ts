@@ -5,7 +5,16 @@ import {
   isSelectableMotocrossClass,
   motocrossClassOptions,
   roleNeedsMotocrossClass,
+  respondentRoleOptions,
+  dashboardRespondentRoleOptions,
+  isRespondentRole,
 } from "@/lib/survey-segments";
+
+test("new role choices omit passengers while historical response filtering remains available", () => {
+  assert.equal(respondentRoleOptions.some(option => option.value === "SIDECAR_PASSENGER"), false);
+  assert.equal(dashboardRespondentRoleOptions.some(option => option.value === "SIDECAR_PASSENGER"), true);
+  assert.equal(isRespondentRole("SIDECAR_PASSENGER"), true);
+});
 
 test("kun aktive deltagere på banen skal vælge motocrossklasse", () => {
   assert.equal(roleNeedsMotocrossClass("RIDER"), true);

@@ -28,7 +28,13 @@ test("invitations and reminders use a readable, image-independent header", async
       assert.match(header, /background-color:#ffffff/);
       assert.match(header, /<p style="[^"]*color:#10244D[^"]*">Danmarks Motor Union<\/p>/);
       assert.match(header, /<h1 style="[^"]*color:#10244D[^"]*">Vi vil gerne høre din mening<\/h1>/);
-      assert.doesNotMatch(header, /gradient|url\(|<img|opacity:|;color:#ffffff/i);
+      assert.doesNotMatch(header, /gradient|url\(|opacity:|;color:#ffffff/i);
+      assert.match(header, /<img src="https?:\/\/[^"\s]+\/dmu-logo\.png" alt="Danmarks Motor Union" width="132" height="63"/);
+      assert.ok(header.indexOf("<img") > header.indexOf("</h1>"));
+      assert.doesNotMatch(payload.htmlContent, /dmu-insights-logo|Har du spørgsmål, kan du kontakte os|mailto:/);
+      assert.doesNotMatch(payload.textContent, /Har du spørgsmål, kan du kontakte os/);
+      assert.match(payload.htmlContent, /Denne mail kan ikke besvares\./);
+      assert.match(payload.textContent, /Denne mail kan ikke besvares\./);
       assert.match(payload.htmlContent, /Test &lt;løb&gt;/);
       assert.match(payload.htmlContent, /background:#10244D;border-radius:10px/);
       assert.match(payload.textContent, /survey\/test-token/);

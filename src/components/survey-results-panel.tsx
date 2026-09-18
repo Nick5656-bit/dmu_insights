@@ -20,7 +20,7 @@ export function SurveyResultsPanel({ results, textQuestionId }: { results: Quest
           <OpenTextQuestionSelect questions={textRows.map((result) => ({ id: result.questionId, title: result.questionTitle }))} selectedQuestionId={selected.questionId} />
           <TextResponsesModal questionTitle={selected.questionTitle} responses={selected.texts} showMetadata={false} />
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">{selected.count} svar. Vises uden tidspunkt og deltageroplysninger.</p>
+        <p className="mt-3 text-sm text-muted-foreground">{selected.count} svar.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-3">
           {selected.texts.slice(0, 3).map((entry, index) => <p key={index} className="rounded-2xl border p-4 text-sm leading-6">{entry.text}</p>)}
         </div>

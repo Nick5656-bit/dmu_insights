@@ -7,6 +7,7 @@ import { nextStepIndex, parseSurveySubmission, type SubmissionResult } from "@/l
 import { DmuLogo } from "@/components/dmu-logo";
 import { LoadingSpinner } from "@/components/submit-button";
 import { roleNeedsMotocrossClass } from "@/lib/survey-segments";
+import { surveyProgress } from "@/lib/survey-progress";
 
 type SegmentKey = "respondentAgeGroup" | "respondentRole" | "motocrossClass";
 
@@ -67,25 +68,17 @@ export function SurveyWizard({ steps, submitAction }: Props) {
   const isLast = safeCurrentIndex === visibleSteps.length - 1;
   const isFirst = safeCurrentIndex === 0;
 
-  // Nummerér kun spørgsmål
-  const questionNumbers: Record<string, number> = {};
-  let counter = 0;
-  for (const step of steps) {
-    if (step.kind === "QUESTION") {
-      counter++;
-      questionNumbers[step.questionId] = counter;
-    }
-  }
-  const totalQuestions = counter;
+  const { total: totalQuestions, position: questionNumber, percent: progressPct } = surveyProgress(visibleSteps, safeCurrentIndex);
 
-  // Fremskridt baseret på spørgsmål besvaret
-  const answeredCount = Object.keys(answers).length;
-  const progressPct =
-    totalQuestions > 0
-      ? Math.round((answeredCount / totalQuestions) * 100)
-      : isLast
-      ? 100
-      : 0;
+  function scheduleAutoAdvance(totalSteps: number) {
+    if (safeCurrentIndex >= totalSteps - 1) return; // Never submit automatically.
+    autoAdvanceTimer.current = setTimeout(() => {
+      autoAdvanceTimer.current = null;
+      if (submitting.current) return;
+      setCurrentIndex((index) => nextStepIndex(index, safeCurrentIndex, totalSteps));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 400);
+  }
 
   function advance() {
     cancelAutoAdvance();
@@ -121,13 +114,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
     if (submitting.current) return;
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
     setError(null);
-    if (autoAdvance && !isLast) {
-      autoAdvanceTimer.current = setTimeout(() => {
-        autoAdvanceTimer.current = null;
-        setCurrentIndex((index) => nextStepIndex(index, safeCurrentIndex, visibleSteps.length));
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }, 400);
-    }
+    if (autoAdvance) scheduleAutoAdvance(visibleSteps.length);
   }
 
   function setSegmentAnswer(segment: SegmentKey, value: string) {
@@ -141,6 +128,13 @@ export function SurveyWizard({ steps, submitAction }: Props) {
         : {}),
     }));
     setError(null);
+    if (value) {
+      // A role change can add/remove the following class step before React
+      // rerenders, so use the next visible length rather than the stale one.
+      const nextRole = segment === "respondentRole" ? value : segmentAnswers.respondentRole;
+      const nextLength = steps.filter(step => step.kind !== "SEGMENT" || step.segment !== "motocrossClass" || roleNeedsMotocrossClass(nextRole as "RIDER" | "SIDECAR_PASSENGER")).length;
+      scheduleAutoAdvance(nextLength);
+    }
   }
 
   function submit() {
@@ -183,16 +177,15 @@ export function SurveyWizard({ steps, submitAction }: Props) {
       <header className="sticky top-0 z-10 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg items-center justify-between">
           <DmuLogo compact />
-          {current.kind === "QUESTION" && (
+          {current.kind !== "INTRO" && (
             <span className="text-xs font-medium text-muted-foreground">
-              {questionNumbers[current.questionId]} / {totalQuestions}
+              {questionNumber} / {totalQuestions}
             </span>
           )}
-          {current.kind === "SEGMENT" && <span className="text-xs font-medium text-muted-foreground">Om dig</span>}
         </div>
         {/* Fremskridtsbar */}
         <div className="mx-auto mt-2 max-w-lg">
-          <div className="h-1 overflow-hidden rounded-full bg-muted/40">
+          <div className="h-1 overflow-hidden rounded-full bg-muted/40" role="progressbar" aria-label="Fremdrift i spørgeskemaet" aria-valuemin={0} aria-valuemax={totalQuestions} aria-valuenow={questionNumber}>
             <div
               className="h-full rounded-full bg-primary transition-all duration-500"
               style={{ width: `${progressPct}%` }}
@@ -254,6 +247,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
                   <label className="block">
                     <span className="sr-only">Vælg motocrossklasse</span>
                     <select
+                      disabled={isPending}
                       value={segmentAnswers[current.segment] ?? ""}
                       onChange={(event) => setSegmentAnswer(current.segment, event.target.value)}
                       className="h-14 w-full rounded-2xl border border-border/70 bg-background px-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -301,7 +295,7 @@ export function SurveyWizard({ steps, submitAction }: Props) {
           {current.kind === "QUESTION" && (
             <div>
               <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
-                Spørgsmål {questionNumbers[current.questionId]}
+                Spørgsmål {questionNumber}
               </p>
               <h2 className="text-xl font-semibold leading-snug text-foreground">
                 {current.title}

@@ -20,7 +20,6 @@ export const respondentAgeGroupOptions: SegmentOption<RespondentAgeGroup>[] = [
 
 export const respondentRoleOptions: SegmentOption<RespondentRole>[] = [
   { value: "RIDER", label: "Aktiv kører" },
-  { value: "SIDECAR_PASSENGER", label: "Sidevognspassager" },
   { value: "VOLUNTEER", label: "Frivillig" },
   { value: "PARENT_GUARDIAN", label: "Forælder eller pårørende" },
   { value: "COACH_OFFICIAL", label: "Træner eller official" },
@@ -136,6 +135,7 @@ export const dashboardRespondentAgeGroupOptions: SegmentOption<RespondentAgeGrou
 
 export const dashboardRespondentRoleOptions: SegmentOption<RespondentRole>[] = [
   ...respondentRoleOptions,
+  { value: "SIDECAR_PASSENGER", label: "Sidevognspassager (tidligere svar)" },
   { value: "NOT_REPORTED", label: "Ikke oplyst (tidligere svar)" },
 ];
 
@@ -151,6 +151,7 @@ const respondentAgeGroupValues = new Set<RespondentAgeGroup>([
 ]);
 const respondentRoleValues = new Set<RespondentRole>([
   ...respondentRoleOptions.map((option) => option.value),
+  "SIDECAR_PASSENGER", // Retain compatibility with existing responses and already-open surveys.
   "NOT_REPORTED",
 ]);
 const motocrossClassValues = new Set<MotocrossClass>([

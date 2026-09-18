@@ -37,7 +37,6 @@ export function TextResponsesModal({
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted/50 transition-colors"
       >
-        <span>📋</span>
         {triggerLabel}
         <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
           {responses.length}

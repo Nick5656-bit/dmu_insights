@@ -13,11 +13,6 @@ const getAppUrl = () => process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:300
 const getFromAddress = () =>
   process.env.SMTP_FROM ?? "DMU Feedback <noreply@dmu.dk>";
 
-const getContactEmail = () =>
-  (process.env.PRIVACY_CONTACT_EMAIL ?? "feedback@dmu-insights.dk")
-    .replace(/[\r\n]/g, "")
-    .trim();
-
 const escapeHtml = (value: string) =>
   value.replace(/[&<>'"]/g, (character) => ({
     "&": "&amp;",
@@ -52,8 +47,7 @@ export async function sendSurveyInvitation({
   const safeSurveyName = escapeHtml(cleanSurveyName);
   const safeSurveyUrl = escapeHtml(surveyUrl);
   const safePrivacyUrl = escapeHtml(privacyUrl);
-  const contactEmail = getContactEmail();
-  const safeContactEmail = escapeHtml(contactEmail);
+  const safeLogoUrl = escapeHtml(`${getAppUrl().replace(/\/$/, "")}/dmu-logo.png`);
   const isReminder = kind === "REMINDER";
   const subject = `${isReminder ? "Paamindelse: " : ""}Din mening om ${cleanSurveyName}`;
   const reminderNotice = isReminder
@@ -85,6 +79,7 @@ export async function sendSurveyInvitation({
             <td bgcolor="#ffffff" style="background-color:#ffffff;border:1px solid #e4e4e7;border-bottom:0;border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
               <p style="margin:0;color:#10244D;font-size:13px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;">Danmarks Motor Union</p>
               <h1 style="margin:8px 0 0;color:#10244D;font-size:24px;font-weight:700;">Vi vil gerne høre din mening</h1>
+              <img src="${safeLogoUrl}" alt="Danmarks Motor Union" width="132" height="63" style="display:block;width:132px;max-width:100%;height:auto;margin:20px auto 0;border:0;color:#10244D;font-size:12px;" />
             </td>
           </tr>
 
@@ -129,7 +124,7 @@ export async function sendSurveyInvitation({
                 Læs om behandling af dine oplysninger: <a href="${safePrivacyUrl}" style="color:#10244D;">${safePrivacyUrl}</a>
               </p>
               <p style="margin:16px 0 0;color:#71717a;font-size:13px;line-height:1.6;">
-                Denne mail kan ikke besvares. Har du spørgsmål, kan du kontakte os på <a href="mailto:${safeContactEmail}" style="color:#10244D;">${safeContactEmail}</a>.
+                Denne mail kan ikke besvares.
               </p>
             </td>
           </tr>
@@ -166,7 +161,7 @@ Dine svar behandles fortroligt, og resultater vises kun samlet. Linket kan kun b
 Læs om behandling af dine oplysninger:
 ${privacyUrl}
 
-Denne mail kan ikke besvares. Har du spørgsmål, kan du kontakte os på ${contactEmail}.
+Denne mail kan ikke besvares.
 
 Med venlig hilsen
 Danmarks Motor Union
