@@ -116,7 +116,7 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
             return (
               <section
                 key={category}
-                className={`rounded-[1.6rem] border border-primary/30 bg-primary/[0.07] p-4 shadow-sm ${
+                className={`rounded-[1.6rem] border border-border bg-muted/40 p-4 shadow-sm ${
                   hasMultipleRows ? "xl:col-span-2" : ""
                 }`}
               >
