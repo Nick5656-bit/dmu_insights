@@ -56,9 +56,9 @@ export async function sendSurveyInvitation({
   const safePrivacyUrl = escapeHtml(privacyUrl);
   const safeLogoUrl = escapeHtml(`${getAppUrl().replace(/\/$/, "")}/dmu-logo.png`);
   const isReminder = kind === "REMINDER";
-  const subject = `${isReminder ? "Paamindelse: " : ""}Din mening om ${cleanSurveyName}`;
+  const subject = `${isReminder ? "Påmindelse: " : ""}Din mening om ${cleanSurveyName}`;
   const reminderNotice = isReminder
-    ? '<p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;"><strong>Dette er en venlig paamindelse.</strong> Du modtager hoejst denne ene paamindelse, og du kan se bort fra mailen, hvis du allerede har svaret.</p>'
+    ? '<p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;"><strong>Dette er en venlig påmindelse.</strong> Du modtager højst denne ene påmindelse, og du kan se bort fra mailen, hvis du allerede har svaret.</p>'
     : "";
   const fromRaw = getFromAddress();
 
@@ -156,7 +156,7 @@ export async function sendSurveyInvitation({
   const text = `
 Hej,
 
-${isReminder ? "Dette er en venlig paamindelse. Du kan se bort fra mailen, hvis du allerede har svaret.\n" : ""}
+${isReminder ? "Dette er en venlig påmindelse. Du kan se bort fra mailen, hvis du allerede har svaret.\n" : ""}
 
 ${surveyType === "ANNUAL" ? `Vi inviterer dig til ${cleanSurveyName} om dit medlemskab og din klub.` : `Du har deltaget i ${cleanSurveyName}, og vi vil gerne høre din mening.`}
 
