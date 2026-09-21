@@ -12,7 +12,6 @@ export default async function PilotSetupPage() {
   ]);
   return <div className="space-y-6">
     <section className="rounded-[28px] border bg-card p-6"><h1 className="text-3xl font-semibold">Pilotopsætning</h1><p className="mt-2 text-sm text-muted-foreground">Administrér klubber og personlige adgange.</p>
-      {admins.some((admin) => admin.email === "admin@dmu.dk") && <p role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Demo-administratoren findes stadig. Luk demo-adgangen, før platformen bruges med rigtige deltageroplysninger.</p>}
     </section>
     <section className="rounded-[28px] border bg-card p-6"><h2 className="text-xl font-semibold">Opret klub og klubadministrator</h2><p className="mt-2 text-sm text-muted-foreground">Testklubber holdes adskilt fra pilotresultater. Klubbens datatype kan ikke ændres efter oprettelse.</p><PilotSetupForm club action={createPilotClub} /></section>
     <section className="rounded-[28px] border bg-card p-6"><h2 className="text-xl font-semibold">Personlig DMU-administrator</h2><p className="mt-2 text-sm text-muted-foreground">Giv en administrator personlig adgang til alle klubber.</p><PilotSetupForm action={createPersonalDmuAdmin} /><ul className="mt-4 space-y-1 text-sm">{admins.map((admin) => <li key={admin.id}>{admin.name} – {admin.email}{admin.email === "admin@dmu.dk" ? " (demo)" : ""}</li>)}</ul></section>

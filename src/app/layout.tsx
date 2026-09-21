@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter, Manrope } from "next/font/google";
 import { VercelAnalytics } from "@/components/vercel-analytics";
 import "./globals.css";
@@ -20,6 +20,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
   display: "swap",
 });
+
+export const viewport: Viewport = { themeColor: "#10244D" };
 
 export const metadata: Metadata = {
   title: "DMU Feedback Portal · Prototype",

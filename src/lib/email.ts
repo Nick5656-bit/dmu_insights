@@ -25,6 +25,7 @@ const escapeHtml = (value: string) =>
 export type SendSurveyInvitationParams = {
   toEmail: string;
   surveyName: string;
+  eventName?: string;
   token: string;
   kind?: "INITIAL" | "REMINDER";
   surveyType?: "ANNUAL" | "EVENT";
@@ -37,13 +38,19 @@ export type SendSurveyInvitationResult =
 export async function sendSurveyInvitation({
   toEmail,
   surveyName,
+  eventName,
   token,
   kind = "INITIAL",
   surveyType = "EVENT",
 }: SendSurveyInvitationParams): Promise<SendSurveyInvitationResult> {
   const surveyUrl = `${getAppUrl()}/survey/${token}`;
   const privacyUrl = `${getAppUrl()}/privacy`;
-  const cleanSurveyName = surveyName.replace(/[\r\n]+/g, " ").trim();
+  // Prefer the actual event title. The fallback also fixes existing queued
+  // invitations/reminders whose internal survey name includes this prefix.
+  const displayName = surveyType === "EVENT"
+    ? eventName ?? surveyName.trim().replace(/^Event feedback\s*[-–—]\s*/i, "")
+    : surveyName;
+  const cleanSurveyName = displayName.replace(/[\r\n]+/g, " ").trim();
   const safeSurveyName = escapeHtml(cleanSurveyName);
   const safeSurveyUrl = escapeHtml(surveyUrl);
   const safePrivacyUrl = escapeHtml(privacyUrl);

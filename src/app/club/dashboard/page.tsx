@@ -84,8 +84,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
   };
 
   const ownInstanceWhere = { clubId: session.clubId, ...(selectedSurveyIds.length ? { id: { in: selectedSurveyIds } } : {}) };
-  const [members, surveys, ownResponsesCount, distributionRows, overviewSeries, sentInvitations, allResponsesCount] = await Promise.all([
-    prisma.member.count({ where: { clubId: session.clubId, active: true } }),
+  const [surveys, ownResponsesCount, distributionRows, overviewSeries, sentInvitations, allResponsesCount] = await Promise.all([
     prisma.surveyInstance.count({ where: { clubId: session.clubId } }),
     prisma.surveyResponse.count({ where: ownResponseWhere }),
     loadSurveyResults(ownResponseWhere, ownInstanceWhere),
@@ -103,7 +102,7 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
   const summaryCards = [
     { label: "Besvarelser", value: ownResponsesCount, hint: "I valgt udsnit" },
-    { label: "Medlemmer", value: members, hint: "Aktive medlemmer" },
+    { label: "Sendte invitationer", value: sentInvitations, hint: "Valgte arrangementer · uden segmentfiltre" },
     { label: "Svarprocent", value: responseCoverage === null ? "—" : `${responseCoverage}%`, hint: "Alle svar / sendte invitationer (uden segmentfiltre)" },
     { label: "Spørgeskemaer", value: surveys, hint: "Alle oprettede" },
   ];

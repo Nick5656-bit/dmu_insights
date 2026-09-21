@@ -43,3 +43,32 @@ test("invitations and reminders use a readable, image-independent header", async
   }
   assert.equal(payloads.length, 4);
 });
+
+test("event invitations and reminders use the event title without internal prefixes", async (t) => {
+  const originalKey = process.env.BREVO_API_KEY;
+  process.env.BREVO_API_KEY = "test-only";
+  t.after(() => {
+    if (originalKey === undefined) delete process.env.BREVO_API_KEY;
+    else process.env.BREVO_API_KEY = originalKey;
+  });
+  const payloads: { subject: string; htmlContent: string; textContent: string }[] = [];
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init: RequestInit) => {
+    payloads.push(JSON.parse(String(init.body)));
+    return new Response("{}", { status: 201 });
+  });
+  const { sendSurveyInvitation } = loadTestModule<typeof Email>("src/lib/email.ts", {});
+  for (const kind of ["INITIAL", "REMINDER"] as const) {
+    for (const eventName of [undefined, "Jysk/Fynsk <mesterskab>\r\n2026"]) {
+      await sendSurveyInvitation({ toEmail: "test@example.invalid", surveyName: "Event feedback - Sjællandsk Mesterskab", eventName, token: "test-token", surveyType: "EVENT", kind });
+      const payload = payloads.at(-1)!;
+      assert.doesNotMatch(JSON.stringify(payload), /Event feedback/);
+      assert.doesNotMatch(payload.subject, /[\r\n]/);
+      const expected = eventName ? "Jysk/Fynsk <mesterskab> 2026" : "Sjællandsk Mesterskab";
+      assert.ok(payload.subject.endsWith(expected));
+      assert.ok(payload.textContent.includes(expected));
+      assert.ok(payload.htmlContent.includes(expected.replace("<", "&lt;").replace(">", "&gt;")));
+    }
+  }
+  await sendSurveyInvitation({ toEmail: "test@example.invalid", surveyName: "Event feedback - Årlig måling", token: "test-token", surveyType: "ANNUAL" });
+  assert.equal(payloads.at(-1)!.subject, "Din mening om Event feedback - Årlig måling");
+});

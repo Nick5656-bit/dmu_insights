@@ -116,13 +116,13 @@ export function QuestionDistributionBoard({ rows, suppressionThreshold }: Questi
             return (
               <section
                 key={category}
-                className={`rounded-[1.6rem] border border-border/70 bg-background/88 p-4 shadow-sm ${
+                className={`rounded-[1.6rem] border border-primary/30 bg-primary/[0.07] p-4 shadow-sm ${
                   hasMultipleRows ? "xl:col-span-2" : ""
                 }`}
               >
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">{category}</h4>
-                  <span className="rounded-full border bg-muted/35 px-3 py-1 text-xs text-muted-foreground">
+                  <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">{category}</h4>
+                  <span className="rounded-full border border-primary/15 bg-card px-3 py-1 text-xs text-primary">
                     {categoryRows.length} spørgsmål
                   </span>
                 </div>

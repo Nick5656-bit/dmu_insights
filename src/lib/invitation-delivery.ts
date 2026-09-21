@@ -72,7 +72,7 @@ async function processQueue(kind: "INITIAL" | "REMINDER", scope: DeliveryScope) 
         : { status: { in: ["CREATED", "SENT"] }, OR: [{ nextDeliveryAttemptAt: null }, { nextDeliveryAttemptAt: { lte: now } }] }),
     },
     select: { id: true, emailSnapshot: true, tokenCiphertext: true, deliveryAttempts: true, reminderAttempts: true,
-      surveyInstance: { select: { name: true, closesAt: true, surveyType: true } } },
+      surveyInstance: { select: { name: true, closesAt: true, surveyType: true, event: { select: { title: true } } } } },
     orderBy: reminder ? [{ reminderNextAttemptAt: "asc" }, { createdAt: "asc" }] : [{ createdAt: "asc" }],
     take: 300,
   });
@@ -119,7 +119,7 @@ async function processQueue(kind: "INITIAL" | "REMINDER", scope: DeliveryScope) 
         continue;
       }
 
-      const result = await sendSurveyInvitation({ kind, toEmail: candidate.emailSnapshot, surveyName: candidate.surveyInstance.name, surveyType: candidate.surveyInstance.surveyType, token });
+      const result = await sendSurveyInvitation({ kind, toEmail: candidate.emailSnapshot, surveyName: candidate.surveyInstance.name, eventName: candidate.surveyInstance.event?.title, surveyType: candidate.surveyInstance.surveyType, token });
       const completedAt = new Date();
       let data: Prisma.SurveyInvitationUpdateInput;
       if (result.success) {
