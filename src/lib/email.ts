@@ -56,8 +56,13 @@ export async function sendSurveyInvitation({
   const safePrivacyUrl = escapeHtml(privacyUrl);
   const safeLogoUrl = escapeHtml(`${getAppUrl().replace(/\/$/, "")}/dmu-logo.png`);
   const isReminder = kind === "REMINDER";
-  const subject = `${isReminder ? "Påmindelse: " : ""}Din mening om ${cleanSurveyName}`;
-  const reminderNotice = isReminder
+  const isEventReminder = isReminder && surveyType === "EVENT";
+  const subject = isEventReminder
+    ? "Har du 2 minutter? Vi vil gerne høre om din oplevelse"
+    : `${isReminder ? "Påmindelse: " : ""}Din mening om ${cleanSurveyName}`;
+  const heading = isEventReminder ? "Din oplevelse kan gøre en forskel" : "Vi vil gerne høre din mening";
+  const buttonLabel = isEventReminder ? "Del din oplevelse →" : "Besvar undersøgelsen →";
+  const reminderNotice = isReminder && !isEventReminder
     ? '<p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;"><strong>Dette er en venlig påmindelse.</strong> Du modtager højst denne ene påmindelse, og du kan se bort fra mailen, hvis du allerede har svaret.</p>'
     : "";
   const fromRaw = getFromAddress();
@@ -73,7 +78,7 @@ export async function sendSurveyInvitation({
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Din mening om ${safeSurveyName}</title>
+  <title>${escapeHtml(subject)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 0;">
@@ -85,7 +90,7 @@ export async function sendSurveyInvitation({
           <tr>
             <td bgcolor="#ffffff" style="background-color:#ffffff;border:1px solid #e4e4e7;border-bottom:0;border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
               <p style="margin:0;color:#10244D;font-size:13px;font-weight:600;letter-spacing:0.2em;text-transform:uppercase;">Danmarks Motor Union</p>
-              <h1 style="margin:8px 0 0;color:#10244D;font-size:24px;font-weight:700;">Vi vil gerne høre din mening</h1>
+              <h1 style="margin:8px 0 0;color:#10244D;font-size:24px;font-weight:700;">${heading}</h1>
               <img src="${safeLogoUrl}" alt="Danmarks Motor Union" width="132" height="63" style="display:block;width:132px;max-width:100%;height:auto;margin:20px auto 0;border:0;color:#10244D;font-size:12px;" />
             </td>
           </tr>
@@ -93,24 +98,33 @@ export async function sendSurveyInvitation({
           <!-- Body -->
           <tr>
             <td style="background:#ffffff;padding:40px;border-left:1px solid #e4e4e7;border-right:1px solid #e4e4e7;">
-              ${reminderNotice}
+              ${isEventReminder ? `
+              <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">Tak for sidst til <strong>${safeSurveyName}</strong>!</p>
+              <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">Vi håber, du har lyst til at fortælle lidt om din dag. Hvad skal vi have mere af, og hvad kunne godt bruge en kærlig hånd?</p>
+              <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">Når du deler din oplevelse, hjælper du klubben med at prioritere det, der betyder noget for dig og de andre deltagere. Dine input kan give idéer til udvikling af banen, faciliteterne og fællesskabet. På den måde er du med til at udvikle motorsporten i Danmark.</p>
+              <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">Spørgeskemaet tager kun <strong>2–3 minutter</strong>.</p>
+              <p style="margin:0 0 24px;color:#3f3f46;font-size:15px;line-height:1.6;">Sammen laver vi mere end larm – vi løfter sporten.</p>
+              ` : `${reminderNotice}
               <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">
                 ${surveyType === "ANNUAL" ? `Vi inviterer dig til <strong>${safeSurveyName}</strong> om dit medlemskab og din klub.` : `Du har deltaget i <strong>${safeSurveyName}</strong>, og vi håber du havde en god oplevelse.`}
               </p>
               <p style="margin:0 0 24px;color:#3f3f46;font-size:15px;line-height:1.6;">
                 Vi vil meget gerne høre din feedback – det hjælper os med at gøre motorsport i Danmark endnu bedre for alle. Det tager kun <strong>2-3 minutter</strong>.
               </p>
+              `}
 
               <!-- CTA Button -->
               <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
                 <tr>
                   <td style="background:#10244D;border-radius:10px;">
                     <a href="${safeSurveyUrl}" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:10px;">
-                      Besvar undersøgelsen →
+                      ${buttonLabel}
                     </a>
                   </td>
                 </tr>
               </table>
+
+              ${isEventReminder ? '<p style="margin:0 0 24px;color:#3f3f46;font-size:15px;line-height:1.6;">Tak for hjælpen — vi sætter pris på din mening.</p>' : ""}
 
               <!-- Info box -->
               <table width="100%" cellpadding="0" cellspacing="0">
@@ -153,7 +167,33 @@ export async function sendSurveyInvitation({
 </body>
 </html>`;
 
-  const text = `
+  const text = isEventReminder ? `
+Danmarks Motor Union
+
+Din oplevelse kan gøre en forskel
+
+Tak for sidst til ${cleanSurveyName}!
+
+Vi håber, du har lyst til at fortælle lidt om din dag. Hvad skal vi have mere af, og hvad kunne godt bruge en kærlig hånd?
+
+Når du deler din oplevelse, hjælper du klubben med at prioritere det, der betyder noget for dig og de andre deltagere. Dine input kan give idéer til udvikling af banen, faciliteterne og fællesskabet. På den måde er du med til at udvikle motorsporten i Danmark.
+
+Spørgeskemaet tager kun 2–3 minutter.
+
+Sammen laver vi mere end larm – vi løfter sporten.
+
+Del din oplevelse →
+${surveyUrl}
+
+Tak for hjælpen — vi sætter pris på din mening.
+
+Dine svar behandles fortroligt, og resultater vises kun samlet. Linket er personligt og kan kun bruges én gang.
+
+Læs om behandling af dine oplysninger:
+${privacyUrl}
+
+Denne mail kan ikke besvares.
+  `.trim() : `
 Hej,
 
 ${isReminder ? "Dette er en venlig påmindelse. Du kan se bort fra mailen, hvis du allerede har svaret.\n" : ""}
