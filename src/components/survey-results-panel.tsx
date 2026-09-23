@@ -8,12 +8,12 @@ export function SurveyResultsPanel({ results, textQuestionId }: { results: Quest
   const textRows = results.filter((result) => result.questionType === "TEXT" && !result.suppressed);
   const selected = textRows.find((result) => result.questionId === textQuestionId) ?? textRows[0];
   return <>
-    <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+    <section className="min-w-0 rounded-[28px] border border-border/70 bg-card p-3 shadow-sm sm:p-6">
       <h2 className="font-heading text-2xl font-semibold">Spørgsmålsfordeling</h2>
       <p className="mt-2 mb-5 text-sm text-muted-foreground">Skala- og valgspørgsmål i det valgte udsnit. Mindst {SUPPRESSION_THRESHOLD} besvarelser pr. spørgsmål.</p>
       <QuestionDistributionBoard rows={chartRows} suppressionThreshold={SUPPRESSION_THRESHOLD} />
     </section>
-    <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+    <section className="min-w-0 rounded-[28px] border border-border/70 bg-card p-3 shadow-sm sm:p-6">
       <h2 className="font-heading text-2xl font-semibold">Åbne svar</h2>
       {selected ? <>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-4">

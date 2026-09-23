@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRef } from "react";
 import { BarChart3, CalendarDays, ClipboardList, Files, House, MessageSquare, Send, Users, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,11 +21,12 @@ type NavItem = {
 
 type AppNavProps = {
   navItems: NavItem[];
-  variant?: "sidebar" | "topbar";
+  variant?: "sidebar" | "topbar" | "mobile";
 };
 
 export function AppNav({ navItems, variant = "sidebar" }: AppNavProps) {
   const pathname = usePathname();
+  const mobileMenu = useRef<HTMLDetailsElement>(null);
   const iconMap: Record<NavIconName, LucideIcon> = {
     overview: House,
     dashboard: BarChart3,
@@ -36,8 +38,8 @@ export function AppNav({ navItems, variant = "sidebar" }: AppNavProps) {
     users: Users,
   };
 
-  return (
-    <nav className={variant === "sidebar" ? "space-y-1.5" : "flex gap-2 overflow-x-auto pb-1"}>
+  const navigation = (
+    <nav aria-label="Hovednavigation" className={variant !== "topbar" ? "space-y-1.5" : "flex gap-2 overflow-x-auto pb-1"}>
       {navItems.map((item) => {
         const activePrefixes = item.activePrefixes ?? [item.href];
         const isActive = activePrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -48,15 +50,16 @@ export function AppNav({ navItems, variant = "sidebar" }: AppNavProps) {
             <Link
               href={item.href}
               className={cn(
-                variant === "sidebar"
+                variant !== "topbar"
                   ? "block rounded-2xl px-4 py-3 text-sm font-medium transition-all"
                   : "inline-flex shrink-0 items-center rounded-full px-4 py-2 text-sm font-medium transition-all",
                 isActive
                   ? "bg-primary text-primary-foreground shadow-[0_14px_28px_-20px_rgba(21,37,77,0.8)]"
-                  : variant === "sidebar"
+                  : variant !== "topbar"
                     ? "text-foreground hover:bg-muted/85"
                     : "border border-border/80 bg-background/80 text-muted-foreground hover:bg-muted/90 hover:text-foreground"
               )}
+              aria-current={isActive ? "page" : undefined}
             >
               <span className={cn("flex items-center gap-3", variant === "topbar" ? "gap-2.5" : "")}>
                 {Icon ? <Icon className={cn("shrink-0", variant === "sidebar" ? "h-4 w-4" : "h-3.5 w-3.5")} /> : null}
@@ -67,7 +70,7 @@ export function AppNav({ navItems, variant = "sidebar" }: AppNavProps) {
             {isActive && item.children && item.children.length > 0 ? (
               <div
                 className={cn(
-                  variant === "sidebar"
+                  variant !== "topbar"
                     ? "ml-7 mt-1 space-y-1 border-l border-border/70 pl-3"
                     : "flex shrink-0 items-center gap-1.5"
                 )}
@@ -80,15 +83,16 @@ export function AppNav({ navItems, variant = "sidebar" }: AppNavProps) {
                       key={child.href}
                       href={child.href}
                       className={cn(
-                        variant === "sidebar"
-                          ? "block rounded-xl px-3 py-2 text-sm font-medium transition-colors"
+                        variant !== "topbar"
+                          ? "block rounded-xl px-3 py-3 text-sm font-medium transition-colors lg:py-2"
                           : "inline-flex items-center rounded-full border px-3 py-2 text-sm font-medium transition-colors",
                         isChildActive
                           ? "bg-primary/10 text-primary"
-                          : variant === "sidebar"
+                          : variant !== "topbar"
                             ? "text-muted-foreground hover:bg-muted hover:text-foreground"
                             : "border-border/80 bg-background/80 text-muted-foreground hover:bg-muted hover:text-foreground"
                       )}
+                      aria-current={isChildActive ? "page" : undefined}
                     >
                       {child.label}
                     </Link>
@@ -101,4 +105,21 @@ export function AppNav({ navItems, variant = "sidebar" }: AppNavProps) {
       })}
     </nav>
   );
+  if (variant !== "mobile") return navigation;
+  const current = navItems.flatMap(item => [item, ...(item.children ?? [])]).find(item => item.href === pathname);
+  return <details ref={mobileMenu} className="group"
+    onKeyDown={event => {
+      if (event.key === "Escape" && mobileMenu.current?.open) {
+        mobileMenu.current.open = false;
+        mobileMenu.current.querySelector("summary")?.focus();
+      }
+    }}>
+    <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+      <span>Menu</span><span className="min-w-0 truncate text-muted-foreground">{current?.label ?? "Navigation"}</span>
+      <span aria-hidden="true" className="shrink-0 group-open:rotate-180">⌄</span>
+    </summary>
+    <div className="mt-2 border-t border-border/70 pt-2" onClick={event => {
+      if ((event.target as HTMLElement).closest("a") && mobileMenu.current) mobileMenu.current.open = false;
+    }}>{navigation}</div>
+  </details>;
 }

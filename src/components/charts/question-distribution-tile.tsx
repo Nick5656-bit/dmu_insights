@@ -45,14 +45,14 @@ export function QuestionDistributionTile({
 
   return (
     <article className="min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-3 flex flex-col items-start justify-between gap-3 sm:flex-row">
         <div>
           {showCategoryLabel ? (
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{category}</p>
           ) : null}
           <h4 className={`text-sm font-semibold leading-5 ${showCategoryLabel ? "mt-1" : ""}`}>{title}</h4>
         </div>
-        <div className="flex flex-col items-end gap-2 text-right">
+        <div className="flex w-full items-center justify-between gap-2 text-right sm:w-auto sm:flex-col sm:items-end">
           <div className="rounded-full bg-background/90 px-3 py-1 text-xs font-medium text-muted-foreground">
             {suppressed ? "Afventer svar" : `${count} svar`}
           </div>
@@ -61,7 +61,7 @@ export function QuestionDistributionTile({
               <button
                 type="button"
                 onClick={() => setChartType("bar")}
-                className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${
+                className={`min-h-11 rounded px-3 py-2 text-xs font-medium transition sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-[11px] ${
                   chartType === "bar" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
                 }`}
                 aria-pressed={chartType === "bar"}
@@ -71,7 +71,7 @@ export function QuestionDistributionTile({
               <button
                 type="button"
                 onClick={() => setChartType("pie")}
-                className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${
+                className={`min-h-11 rounded px-3 py-2 text-xs font-medium transition sm:min-h-0 sm:px-2.5 sm:py-1 sm:text-[11px] ${
                   chartType === "pie" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
                 }`}
                 aria-pressed={chartType === "pie"}

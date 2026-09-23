@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MobileFilterPanel } from "@/components/mobile-filter-panel";
 import { parseSelectionIds, parseDashboardYear } from "@/lib/dashboard-filters";
 import { overviewQuestions } from "@/lib/result-overview";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
@@ -187,7 +188,8 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
         <nav aria-label="Datagrundlag" className="mt-3 inline-flex gap-1 rounded-xl border border-white/15 bg-black/10 p-1">
           {(["pilot", "test"] as const).map((mode) => <Link key={mode} href={`/dmu/dashboard?dataMode=${mode}`} aria-current={(isTest ? "test" : "pilot") === mode ? "page" : undefined} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${(isTest ? "test" : "pilot") === mode ? "bg-white text-primary shadow-sm" : "text-white/75 hover:bg-white/10 hover:text-white"}`}>{mode === "pilot" ? "Pilotdata" : "Testdata"}</Link>)}
         </nav>
-        <form key={exportParams.toString()} className="mt-3" method="get" aria-label="Filtrér resultater">
+        <MobileFilterPanel key={exportParams.toString()} count={activeFilters.length - 1 + (selectedYear ? 1 : 0)}>
+        <form className="mt-3" method="get" aria-label="Filtrér resultater">
           <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <input type="hidden" name="dataMode" value={isTest ? "test" : "pilot"} />
           <div className="min-w-0 space-y-2">
@@ -244,15 +246,16 @@ export default async function DmuDashboardPage({ searchParams }: DmuDashboardPro
 
           </div>
         </form>
+        </MobileFilterPanel>
       </section>
 
       {/* ── Statistik-kort ───────────────────────────────────────────────── */}
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {summaryCards.map((card) => (
-          <article key={card.label} className="rounded-[24px] border border-border/70 bg-card p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">{card.label}</p>
-            <p className="mt-3 font-heading text-3xl font-semibold tracking-tight text-foreground">{card.value}</p>
-            <p className="mt-2 text-sm text-muted-foreground">{card.hint}</p>
+          <article key={card.label} className="min-w-0 rounded-[24px] border border-border/70 bg-card p-3 shadow-sm sm:p-5">
+            <p className="break-words text-xs font-semibold text-muted-foreground sm:uppercase sm:tracking-[0.22em]">{card.label}</p>
+            <p className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground sm:mt-3 sm:text-3xl">{card.value}</p>
+            <p className="mt-2 text-xs text-muted-foreground sm:text-sm">{card.hint}</p>
           </article>
         ))}
       </section>

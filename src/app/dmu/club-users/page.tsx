@@ -4,8 +4,7 @@ import bcrypt from "bcryptjs";
 import { passwordSchema, pilotUserSchema } from "@/lib/pilot-setup";
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DeleteClubUserButton } from "@/components/delete-club-user-button";
-import { EditClubUserButton } from "@/components/edit-club-user-button";
+import { ClubUserList } from "@/components/club-user-list";
 import { SubmitButton } from "@/components/submit-button";
 import { PasswordInput } from "@/components/password-input";
 
@@ -177,7 +176,7 @@ export default async function DmuClubUsersPage({
       )}
 
       {/* Create user form */}
-      <section className="rounded-xl border bg-background p-6">
+      <section className="min-w-0 rounded-xl border bg-background p-4 sm:p-6">
         <h3 className="mb-1 text-base font-semibold">Opret ny klubbruger</h3>
         <p className="mb-5 text-sm text-muted-foreground">
           Vælg en klub, udfyld formandens navn og e-mail, og angiv en midlertidig adgangskode som du deler med vedkommende.
@@ -263,7 +262,7 @@ export default async function DmuClubUsersPage({
       </section>
 
       {/* Existing users grouped by club */}
-      <section className="rounded-xl border bg-background p-6">
+      <section className="min-w-0 rounded-xl border bg-background p-4 sm:p-6">
         <h3 className="mb-4 text-base font-semibold">Eksisterende klubbrugere</h3>
 
         {totalUsers === 0 ? (
@@ -276,47 +275,14 @@ export default async function DmuClubUsersPage({
               .filter((c) => c.users.length > 0)
               .map((club) => (
                 <div key={club.id}>
-                  <div className="mb-2 flex items-center gap-2">
+                  <div className="mb-2 flex flex-wrap items-center gap-2 break-words">
                     <span className="font-medium">{club.name}</span>
                     <span className="text-xs text-muted-foreground">— {club.city}</span>
                     <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                       {club.users.length} bruger{club.users.length > 1 ? "e" : ""}
                     </span>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/30 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                          <th className="px-4 py-2 font-medium">Navn</th>
-                          <th className="px-4 py-2 font-medium">E-mail</th>
-                          <th className="px-4 py-2 font-medium"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/50">
-                        {club.users.map((user) => (
-                          <tr key={user.id} className="hover:bg-muted/20">
-                            <td className="px-4 py-3 font-medium">{user.name}</td>
-                            <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <EditClubUserButton
-                                  action={updateClubUser}
-                                  userId={user.id}
-                                  userName={user.name}
-                                  userEmail={user.email}
-                                />
-                                <DeleteClubUserButton
-                                  action={deleteClubUser}
-                                  userId={user.id}
-                                  userName={user.name}
-                                />
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ClubUserList users={club.users} updateAction={updateClubUser} deleteAction={deleteClubUser} />
                 </div>
               ))}
           </div>

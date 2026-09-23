@@ -133,7 +133,7 @@ export default async function TidligereUdsendelsePage({ searchParams }: Props) {
       </section>
 
       {/* Søg i historik */}
-      <section className="rounded-[28px] border border-border/70 bg-card p-6 shadow-sm">
+      <section className="min-w-0 rounded-[28px] border border-border/70 bg-card p-4 shadow-sm sm:p-6">
         <h2 className="font-heading text-xl font-semibold tracking-tight text-foreground">
           Søg i udsendelser
         </h2>
@@ -193,11 +193,11 @@ export default async function TidligereUdsendelsePage({ searchParams }: Props) {
             instances.map((instance) => (
               <article
                 key={instance.id}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-[22px] border border-border/70 bg-background/80 p-5"
+                className="flex min-w-0 flex-col gap-4 rounded-[22px] border border-border/70 bg-background/80 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:p-5"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-foreground">{instance.club.name}</p>
-                  <p className="mt-0.5 truncate text-sm text-muted-foreground">{instance.name}</p>
+                  <p className="break-words font-medium text-foreground">{instance.club.name}</p>
+                  <p className="mt-0.5 break-words text-sm text-muted-foreground sm:truncate">{instance.name}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className="rounded-full border border-border/60 bg-muted/20 px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
                       {instance.surveyType === "ANNUAL" ? "Årlig måling" : "Event-feedback"}
@@ -215,14 +215,14 @@ export default async function TidligereUdsendelsePage({ searchParams }: Props) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-6">
-                  <div className="text-right">
+                <div className="grid grid-cols-2 items-center gap-3 sm:flex sm:gap-6">
+                  <div className="sm:text-right">
                     <p className="text-xs text-muted-foreground">Invitationer</p>
                     <p className="mt-0.5 text-xl font-semibold text-foreground">
                       {instance.invitationCount}
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="sm:text-right">
                     <p className="text-xs text-muted-foreground">Besvarede</p>
                     <p className="mt-0.5 text-xl font-semibold text-green-600">
                       {instance.answeredCount}
@@ -230,7 +230,7 @@ export default async function TidligereUdsendelsePage({ searchParams }: Props) {
                   </div>
                   <Link
                     href={`/dmu/settings/sends/${instance.id}`}
-                    className="rounded-2xl border border-border/70 px-4 py-2 text-sm font-medium transition hover:bg-muted/20"
+                    className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-2xl border border-border/70 px-4 py-2 text-sm font-medium transition hover:bg-muted/20 sm:min-h-0"
                   >
                     Se mails →
                   </Link>

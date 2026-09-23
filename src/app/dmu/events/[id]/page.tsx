@@ -455,11 +455,11 @@ export default async function DmuEventDetailPage({
           </div>
         )}
 
-        <div className="mt-6 overflow-hidden rounded-2xl border">
+        <div className="mt-6 overflow-x-auto rounded-2xl border" role="region" aria-label="Deltagerliste" tabIndex={0}>
           {event.participants.length === 0 ? (
             <p className="p-8 text-center text-sm text-muted-foreground">Ingen deltagere er tilføjet endnu.</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[600px] text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-3">Navn</th>

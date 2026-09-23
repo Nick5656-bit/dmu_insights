@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MobileFilterPanel } from "@/components/mobile-filter-panel";
 import { parseSelectionIds } from "@/lib/dashboard-filters";
 import { overviewQuestions } from "@/lib/result-overview";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
@@ -147,7 +148,8 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
         </div>
 
 
-        <form key={exportParams.toString()} className="mt-3" method="get" aria-label="Filtrér resultater">
+        <MobileFilterPanel key={exportParams.toString()} count={[selectedSurveyIds.length > 0, respondentAgeGroupFilter, motocrossClassFilter, respondentRoleFilter].filter(Boolean).length}>
+        <form className="mt-3" method="get" aria-label="Filtrér resultater">
           <div className="grid grid-cols-1 items-end gap-3 sm:max-w-xl">
           <div className="min-w-0 space-y-2">
             <label htmlFor="dashboard-survey" className="block text-xs font-medium text-white/80">Arrangementer / udsendelser</label>
@@ -187,15 +189,16 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
 
           </div>
         </form>
+        </MobileFilterPanel>
       </section>
 
       {/* ── Statistik-kort ───────────────────────────────────────────────── */}
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         {summaryCards.map((card) => (
-          <article key={card.label} className="rounded-[24px] border border-border/70 bg-card p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">{card.label}</p>
-            <p className="mt-3 font-heading text-3xl font-semibold tracking-tight text-foreground">{card.value}</p>
-            <p className="mt-2 text-sm text-muted-foreground">{card.hint}</p>
+          <article key={card.label} className="min-w-0 rounded-[24px] border border-border/70 bg-card p-3 shadow-sm sm:p-5">
+            <p className="break-words text-xs font-semibold text-muted-foreground sm:uppercase sm:tracking-[0.22em]">{card.label}</p>
+            <p className="mt-2 font-heading text-2xl font-semibold tracking-tight text-foreground sm:mt-3 sm:text-3xl">{card.value}</p>
+            <p className="mt-2 text-xs text-muted-foreground sm:text-sm">{card.hint}</p>
           </article>
         ))}
       </section>

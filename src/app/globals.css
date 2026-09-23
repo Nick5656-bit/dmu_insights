@@ -219,3 +219,15 @@
     @apply bg-muted/20;
   }
 }
+
+/* Larger controls in the signed-in mobile workspace also avoid iOS input zoom.
+   Keep this outside the utility layer so local text-xs/text-sm cannot shrink them. */
+@media (max-width: 639px) {
+  .app-workspace input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+  .app-workspace select,
+  .app-workspace textarea {
+    min-height: 44px;
+    max-width: 100%;
+    font-size: 16px;
+  }
+}

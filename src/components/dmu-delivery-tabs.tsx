@@ -18,7 +18,7 @@ export function DmuDeliveryTabs({ variant = "light" }: DmuDeliveryTabsProps) {
   const pathname = usePathname();
 
   return (
-    <div className={cn("inline-flex rounded-full p-1", variant === "dark" ? "border border-white/15 bg-white/10" : "border border-border/70 bg-muted/25")}>
+    <nav aria-label="Udsendelser" className={cn("flex w-full min-w-0 flex-col rounded-2xl p-1 sm:inline-flex sm:w-auto sm:flex-row sm:rounded-full", variant === "dark" ? "border border-white/15 bg-white/10" : "border border-border/70 bg-muted/25")}>
       {tabs.map((tab) => {
         const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
 
@@ -26,8 +26,9 @@ export function DmuDeliveryTabs({ variant = "light" }: DmuDeliveryTabsProps) {
           <Link
             key={tab.href}
             href={tab.href}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
-              "rounded-full px-4 py-2 text-sm font-medium transition-all",
+              "flex min-h-11 items-center rounded-full px-4 py-2 text-sm font-medium transition-all sm:min-h-0",
               isActive
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : variant === "dark"
@@ -39,6 +40,6 @@ export function DmuDeliveryTabs({ variant = "light" }: DmuDeliveryTabsProps) {
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }

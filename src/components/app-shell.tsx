@@ -57,7 +57,7 @@ export function AppShell({ areaLabel, userName, navItems, children }: AppShellPr
                   {userName}
                 </span>
                 <form action="/api/auth/logout" method="post">
-                  <Button variant="outline" size="default" className="rounded-xl" type="submit">
+                  <Button variant="outline" size="default" className="h-11 rounded-xl sm:h-10" type="submit">
                     Log ud
                   </Button>
                 </form>
@@ -66,10 +66,10 @@ export function AppShell({ areaLabel, userName, navItems, children }: AppShellPr
           </header>
 
           <div className="mt-3 rounded-[1.5rem] border border-border/70 bg-background/75 p-2 backdrop-blur lg:hidden">
-            <AppNav navItems={navItems} variant="topbar" />
+            <AppNav navItems={navItems} variant="mobile" />
           </div>
 
-          <main className="mt-4 min-w-0 space-y-6">{children}</main>
+          <main className="app-workspace mt-4 min-w-0 space-y-6">{children}</main>
         </div>
       </div>
     </div>

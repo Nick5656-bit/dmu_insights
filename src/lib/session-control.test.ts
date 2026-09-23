@@ -73,12 +73,11 @@ test("actual club-user edit action enforces shared password policy; blank preser
     "next/navigation": { redirect: (url: string) => { throw new Error(url); } },
     "next/cache": { revalidatePath() {} },
     "bcryptjs": { hash: async (password: string) => `hashed:${password}` },
-    "@/components/edit-club-user-button": { EditClubUserButton: Widget },
-    "@/components/delete-club-user-button": { DeleteClubUserButton: () => null },
+    "@/components/club-user-list": { ClubUserList: Widget },
     "@/components/submit-button": { SubmitButton: () => null },
   });
   const tree = await page.default({ searchParams: Promise.resolve({}) });
-  const action = findElements(tree, Widget)[0].props.action as (data: FormData) => Promise<void>;
+  const action = findElements(tree, Widget)[0].props.updateAction as (data: FormData) => Promise<void>;
   const form = (password: string, email = target.email) => {
     const data = new FormData();
     for (const [key, value] of Object.entries({ userId: target.id, name: target.name, email, password })) data.set(key, value);

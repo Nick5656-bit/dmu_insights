@@ -21,7 +21,7 @@ export function EditClubUserButton({
     return (
       <button
         type="button"
-        className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+        className="min-h-11 rounded-md border px-3 py-1 text-sm hover:bg-muted sm:min-h-0 sm:text-xs"
         onClick={() => setIsOpen(true)}
       >
         Rediger
@@ -30,7 +30,7 @@ export function EditClubUserButton({
   }
 
   return (
-    <div className="rounded-lg border bg-background p-3 shadow-sm min-w-[20rem]">
+    <div className="w-full min-w-0 rounded-lg border bg-background p-3 text-left shadow-sm sm:min-w-[20rem] sm:w-auto">
       <form action={action} className="space-y-2">
         <input type="hidden" name="userId" value={userId} />
         <div className="space-y-1">
@@ -42,7 +42,7 @@ export function EditClubUserButton({
             name="name"
             defaultValue={userName}
             required
-            className="w-full rounded-md border px-2 py-1.5 text-xs"
+            className="min-h-11 w-full rounded-md border px-2 py-1.5 text-base sm:min-h-0 sm:text-xs"
           />
         </div>
 
@@ -56,7 +56,7 @@ export function EditClubUserButton({
             name="email"
             defaultValue={userEmail}
             required
-            className="w-full rounded-md border px-2 py-1.5 text-xs"
+            className="min-h-11 w-full rounded-md border px-2 py-1.5 text-base sm:min-h-0 sm:text-xs"
           />
         </div>
 
@@ -71,19 +71,19 @@ export function EditClubUserButton({
             maxLength={72}
             autoComplete="new-password"
             placeholder="Lad stå tom for at beholde nuværende"
-            className="w-full rounded-md border px-2 py-1.5 text-xs"
+            className="min-h-11 w-full rounded-md border px-2 py-1.5 text-base sm:min-h-0 sm:text-xs"
           />
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
           <button
             type="button"
-            className="rounded-md border px-3 py-1 text-xs hover:bg-muted"
+            className="min-h-11 rounded-md border px-3 py-1 text-sm hover:bg-muted sm:min-h-0 sm:text-xs"
             onClick={() => setIsOpen(false)}
           >
             Annuller
           </button>
-          <SubmitButton pendingText="Gemmer..." className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-background hover:bg-foreground/80">
+          <SubmitButton pendingText="Gemmer..." className="min-h-11 rounded-md bg-foreground px-3 py-1 text-sm font-medium text-background hover:bg-foreground/80 sm:min-h-0 sm:text-xs">
             Gem
           </SubmitButton>
         </div>
