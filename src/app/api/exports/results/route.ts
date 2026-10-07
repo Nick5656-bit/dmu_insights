@@ -6,7 +6,13 @@ import { prisma } from "@/lib/prisma";
 import { loadSurveyResults } from "@/lib/survey-results.server";
 import { resultsCsv, surveyYearWhere } from "@/lib/survey-results";
 import { isMotocrossClass, isRespondentAgeGroup, isRespondentRole } from "@/lib/survey-segments";
+import { dashboardMotocrossClassOptions, dashboardRespondentAgeGroupOptions, dashboardRespondentRoleOptions } from "@/lib/survey-segments";
+import { loadResultOverview } from "@/lib/result-overview.server";
+import { overviewQuestions } from "@/lib/result-overview";
+import { renderResultsPdf } from "@/lib/results-pdf";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -57,6 +63,37 @@ export async function GET(request: Request) {
   if (surveyInstanceIds.length) exportScope += ` · ${surveyInstanceIds.length} valgte arrangementer/udsendelser`;
   responseWhere.surveyInstance = instanceWhere;
   const results = await loadSurveyResults(responseWhere, instanceWhere);
+  if (searchParams.get("format") === "pdf") {
+    const instances = await prisma.surveyInstance.findMany({
+      where: instanceWhere,
+      select: { id: true, name: true, club: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    });
+    if (surveyInstanceIds.some(id => !instances.some(instance => instance.id === id))) {
+      return NextResponse.json({ error: "Et valgt arrangement er ikke tilgængeligt med disse filtre." }, { status: 400 });
+    }
+    const filters = [
+      instances.length ? `Arrangementer / udsendelser: ${instances.map(instance => `${instance.name} (${instance.club.name})`).join("; ")}` : "Ingen arrangementer eller udsendelser i det valgte udsnit.",
+      `Alder: ${dashboardRespondentAgeGroupOptions.find(option => option.value === respondentAgeGroup)?.label ?? "Alle aldre"}`,
+      `Klasse: ${dashboardMotocrossClassOptions.find(option => option.value === motocrossClass)?.label ?? "Alle klasser"}`,
+      `Rolle: ${dashboardRespondentRoleOptions.find(option => option.value === respondentRole)?.label ?? "Alle roller"}`,
+    ];
+    const comparison = surveyInstanceIds.length > 1;
+    const series = comparison ? await loadResultOverview(responseWhere, instanceWhere) : [{
+      id: "combined", label: surveyInstanceIds.length === 1 ? instances[0].name : "Samlede resultater", questions: overviewQuestions(results),
+    }];
+    try {
+      const pdf = await renderResultsPdf({ scope: exportScope, filters, results, series, comparison });
+      return new NextResponse(new Uint8Array(pdf), { headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="dmu-resultater-${new Date().toISOString().slice(0, 10)}.pdf"`,
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      } });
+    } catch {
+      return NextResponse.json({ error: "PDF-rapporten kunne ikke oprettes. Prøv igen eller brug CSV-eksporten." }, { status: 500, headers: { "Cache-Control": "no-store" } });
+    }
+  }
   const csv = resultsCsv(results, exportScope);
   const filename = `dmu-resultater-${new Date().toISOString().slice(0, 10)}.csv`;
 

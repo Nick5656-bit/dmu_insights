@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["pdfkit"],
+  outputFileTracingIncludes: {
+    "/api/exports/results": [
+      "./public/dmu-logo.png",
+      "./node_modules/@fontsource/noto-sans/files/noto-sans-latin-400-normal.woff",
+      "./node_modules/@fontsource/noto-sans/files/noto-sans-latin-700-normal.woff",
+    ],
+  },
   // Vercel's Next.js 16.3 adapter manages its own output. Combining it with
   // standalone fails while reading next-server.js.nft.json (next.js#96646).
   // Keep standalone output only for local/self-hosted builds.

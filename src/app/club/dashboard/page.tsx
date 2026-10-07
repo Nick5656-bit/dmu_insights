@@ -4,6 +4,7 @@ import { parseSelectionIds } from "@/lib/dashboard-filters";
 import { overviewQuestions } from "@/lib/result-overview";
 import { MotocrossClass, RespondentAgeGroup, RespondentRole } from "@prisma/client";
 import { ResultOverviewChart } from "@/components/charts/result-overview-chart";
+import { PdfExportButton } from "@/components/pdf-export-button";
 import { loadResultOverview } from "@/lib/result-overview.server";
 import { ClubMultiSelectFilter } from "@/components/club-multi-select-filter";
 import { SurveyResultsPanel } from "@/components/survey-results-panel";
@@ -142,8 +143,9 @@ export default async function ClubDashboardPage({ searchParams }: ClubDashboardP
               href={exportHref}
               className="rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/18"
             >
-              Eksportér resultater
+              Eksportér CSV
             </a>
+            <PdfExportButton href={exportHref} />
           </div>
         </div>
 
